@@ -6,6 +6,7 @@
 // Numbers
 typedef enum {
     TOKEN_NUMBER,
+    TOKEN_OPERATOR,
     TOKEN_PLUS, TOKEN_MINUS, TOKEN_MUL, TOKEN_DIV,  // + - * /
     TOKEN_EQUALS,                                   // =
     TOKEN_IDENTIFIER, TOKEN_TERM, TOKEN_DROP,       //
@@ -15,12 +16,14 @@ typedef enum {
     TOKEN_LBRACE, TOKEN_RBRACE,                     // { and }
     TOKEN_COLON,                                    // :
     TOKEN_COMMA,                                    // ,
+    TOKEN_PERIOD,
     TOKEN_RETURN,                                   // return keyword
     TOKEN_EOF,
 
     TOKEN_UNKNOWN,
-
     NUM_STR,  // i8*, string pointer
+    TOKEN_STRING_LIT,
+    TOKEN_CHAR_LIT
 } TokenType;
 
 // Numeric Literals
@@ -39,10 +42,11 @@ typedef struct {
     NumericKind kind;
     union {
         int64_t i64;
-        double f64;
+        _Float64 f64; // No explicit _Float64 like in C23 and double will sometimes be 32 bits but for here it's fine because I know it's 64 bits on my machine
+                        // AHAHAHHAH I HAVE GCC THIS IS AMAZING
 
         int32_t i32;
-        float f32;
+        _Float32 f32;
 
         bool bivalent;
     };
@@ -53,7 +57,9 @@ typedef struct {
         // These two avoid either hardcoding a limit or a dynamically allocated a string using malloc where malloc is slow and hardcoding limits is boring
     const char *start; // First char in source string
     size_t length;     // Exact length of source token string
-
     int line;          // Errors
     int column;
 } Token;
+
+void lexer_init(const char *source);
+Token lexer_next_token(void);
