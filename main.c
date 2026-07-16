@@ -76,7 +76,7 @@ int main(void) {
         "population 2 * return |\n"
         "as (x 6 <) [\n"
         "   print(x ℤ ∈)|\n"
-        "   if (x 5 -) [\n"
+        "   if (x 5 -) 10 20 [\n"
         "      0 return|\n"
         "   ]|\n"
         "   i64 x = x 1 +|\n"

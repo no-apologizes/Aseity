@@ -1,7 +1,7 @@
 #pragma once
-#include "lexer.h" // I'm aware all headers are in the same dir but I'm sure including the absolute path won't hurt
+#include "lexer.h"
 
-// The longest a variable's name can be, 63 max not including the \0
+// The longest a variable's name can be, 63 max including the \0
 #define MAX_VAR_LENGTH 64
 
 typedef enum {
@@ -12,6 +12,7 @@ typedef enum {
     NODE_BLOCK,        // Code enclosed in brackets [ ... ]
     NODE_IF,           // Conditionals
     NODE_AS_LOOP,      // Loops
+    NODE_CALL,         // Function/method calls like [1, 2].add()|, UFCS
     NODE_RETURN,       // Return
     NODE_UNKNOWN       // Sentinels/internal markers
 } ASTNodeType;
@@ -61,6 +62,13 @@ struct ASTNode {
             ASTNode *condition;
             ASTNode *body_block;
         } as_loop;
+
+        // Function or UFCS method calls
+        struct {
+            char func_name[MAX_VAR_LENGTH];
+            ASTNode *receiver; // LeftHandSide as [1, 2] in [1, 2].add()
+            ASTNode *args;     // Arguements passed inside ()
+        } call_stmt;
 
         // Return expressions
         struct {

@@ -1,6 +1,7 @@
 #include "Headers/parser.h"
 #include "Headers/ast.h"
 #include "Headers/lexer.h"
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,7 +28,8 @@ typedef enum {
     MARKER_LBRACKET,
     MARKER_IF,
     MARKER_ELSE,
-    MARKER_AS
+    MARKER_AS,
+    MARKER_PERIOD
 } BlockMarker;
 
 typedef struct {
@@ -170,16 +172,41 @@ parse_lparen: {
 }
 
 parse_rparen: {
-    ASTNode *expr = parser_pop(&P);
+    ASTNode *args = parser_pop(&P);
     ASTNode *marker = parser_pop(&P);
+
     if (marker->type != NODE_UNKNOWN || ((MarkerNode*)marker)->marker != MARKER_LPAREN) {
         fprintf(stderr, "Syntax Error(parser): Open parenthesis on line %d\n", t.line);
         exit(EXIT_FAILURE);
     }
     free(marker);
-    parser_push(&P, expr);
-    t = lexer_next_token();
-    goto *dispatch[t.type];
+
+    // Check for UFCS method call: reciver period method ( args )
+    if (P.stack_top >= 2 &&
+        P.stack[P.stack_top - 1]->type == NODE_IDENTIFIER &&
+        P.stack[P.stack_top - 2]->type == NODE_UNKNOWN &&
+        ((MarkerNode*)P.stack[P.stack_top - 2])->marker == MARKER_PERIOD) {
+
+        ASTNode *method_id  = parser_pop(&P);
+        ASTNode *dot_marker = parser_pop(&P);
+        ASTNode *receiver   = parser_pop(&P);
+
+        free(dot_marker);
+
+        ASTNode *call_node = allocate_node(NODE_CALL, t);
+        strncpy(call_node->call_stmt.func_name, method_id->var_decl.var_name, MAX_VAR_LENGTH - 1);
+        call_node->call_stmt.receiver = receiver;
+        call_node->call_stmt.args     = args;
+
+        free(method_id);
+        parser_push(&P, call_node);
+        } else {
+            // Standard mathmatical grouping parens
+            parser_push(&P, args);
+        }
+
+        t = lexer_next_token();
+        goto *dispatch[t.type];
 }
 
 parse_lbracket: {
@@ -192,6 +219,7 @@ parse_rbracket: {
     size_t capacity = 8;
     ASTNode **stmts = malloc(capacity * sizeof(ASTNode*));
     size_t count = 0;
+    bool found_lbracket = false;
 
     // Unwind stack untill MARKER_LBRACKET
     while (P.stack_top > 0) {
@@ -199,6 +227,7 @@ parse_rbracket: {
         if (top->type == NODE_UNKNOWN && ((MarkerNode*)top)->marker == MARKER_LBRACKET) {
             P.stack_top--;
             free(top);
+            found_lbracket = true;
             break;
         }
         // Exponential memory realloc of O(something)
@@ -207,6 +236,11 @@ parse_rbracket: {
             stmts = realloc(stmts, capacity * sizeof(ASTNode*));
         }
         stmts[count++] = parser_pop(&P); // Collect statement
+    }
+
+    if (!found_lbracket) {
+        fprintf(stderr, "Syntax Error(parser): Unmatched ']' on line %d.\n", t.line);
+        exit(EXIT_FAILURE);
     }
 
     // Reverse array, popping yielded [S_n ... S_1], we need [S_1 ... S_n]
@@ -261,10 +295,15 @@ parse_term: {
     }
 
     // We want something like 'i64 a = 1|'
-    if (P.stack_top >= 4 && P.stack[P.stack_top - 4]->type == NODE_VAR_DECL) {
+    // fix: requires NODE_VAR_DECL at top-4 and MARKER_NONE(=) at top-2
+    if (P.stack_top >= 4 &&
+        P.stack[P.stack_top - 4]->type == NODE_VAR_DECL &&
+        P.stack[P.stack_top - 3]->type == NODE_IDENTIFIER && // Check for if someone writes i64 10 = 20|
+        P.stack[P.stack_top - 2]->type == NODE_UNKNOWN && 
+        ((MarkerNode*)P.stack[P.stack_top - 2])->marker == MARKER_NONE){
         // Find it backwards
         ASTNode *val_node  = parser_pop(&P); // numeric literal, 1
-        ASTNode *eq_marker = parser_pop(&P); // 'equals' marker, =
+        ASTNode *eq_marker = parser_pop(&P); // 'equals' marker, = // fix: now actually verified as '='
         ASTNode *id_node   = parser_pop(&P); // id.              a
         ASTNode *type_node = parser_pop(&P); // type.            i64
 
@@ -277,10 +316,13 @@ parse_term: {
         parser_push(&P, type_node); // Push complete NODE_VAR_DECL back onto stack
     }
     // Conditional Reduction(with if AND else block): `if (condition) [then] else [else]` <- 5 right here
-    else if (P.stack_top >= 5 && P.stack[P.stack_top - 5]->type == NODE_UNKNOWN && // Looks back 5 items to verify it's an if stmt
-             ((MarkerNode*)P.stack[P.stack_top - 5])->marker == MARKER_IF) {
+    // fix: requires MARKER_IF at top-5 and MARKER_ELSE at top-2
+    else if (P.stack_top >= 5 && 
+             P.stack[P.stack_top - 5]->type == NODE_UNKNOWN && ((MarkerNode*)P.stack[P.stack_top - 5])->marker == MARKER_IF &&
+             P.stack[P.stack_top - 2]->type == NODE_UNKNOWN && ((MarkerNode*)P.stack[P.stack_top - 2])->marker == MARKER_ELSE) {
+
         ASTNode *else_blk   = parser_pop(&P);
-        ASTNode *else_mrk   = parser_pop(&P);
+        ASTNode *else_mrk   = parser_pop(&P); // fix: now actually verifed as 'else'
         ASTNode *then_blk   = parser_pop(&P);
         ASTNode *condition  = parser_pop(&P);
         ASTNode *if_marker  = parser_pop(&P);
@@ -323,6 +365,17 @@ parse_term: {
         as_node->as_loop.body_block = body_blk;
         parser_push(&P, as_node);
     }
+    // If we hit term and none of the valid reductions ran, but there's still a control flow marker near the top of the stack, the syntax is malformed
+    else {
+        for (size_t i = P.stack_top; i > 0 && (P.stack_top - i) < 6; i--) {
+            ASTNode *check = P.stack[i - 1];
+            if (check->type == NODE_UNKNOWN) {
+                BlockMarker m = ((MarkerNode*)check)->marker;
+                if (m == MARKER_IF || m == MARKER_ELSE || m == MARKER_AS) {
+                    fprintf(stderr, "Compiler Error(parser): Malformed control flow statement after line %d.\n", t.line);
+                    exit(EXIT_FAILURE);
+                }}}
+    }
 
     // Check if we are inside an unclosed [ ... ] block
     bool inside_block = false;
@@ -348,8 +401,16 @@ parse_ignore: {
 }
 
 parse_eof:
-    if (P.stack_top > 0) {
+    if (P.stack_top == 1) {
         return parser_pop(&P);
+    }
+    else if (P.stack_top > 1) {
+        fprintf(stderr, "Compiler Error(parser: Unexpected EOF, missing '|' terminator?\n");
+        // Clean up stranded memory to prevent leaks
+        while (P.stack_top > 0) {
+            free_ast(parser_pop(&P));
+        }
+        exit(EXIT_FAILURE);
     }
     return NULL;
 }

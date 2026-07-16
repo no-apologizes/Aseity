@@ -6,7 +6,7 @@
 // Numbers
 typedef enum {
     TOKEN_EOF,
-    TOKEN_NUMBER_LIT,                   // TODO: Add the thing here
+    TOKEN_NUMBER_LIT,               // TODO: Add the thing here
     TOKEN_UNKNOWN,
     TOKEN_TYPE,                     // Type keyword, e.g., i64, f32, etc.
     TOKEN_OPERATOR,
@@ -37,11 +37,24 @@ typedef enum {
 // Numeric Literals
 typedef enum {
     NUMERIC_UNKNOWN,
-    NUMERIC_I64,  // 64-bit integer
-    NUMERIC_F64,  // 64-bit float, ~15 decimal digits
+
+    NUMERIC_I8,
+    NUMERIC_U8,
+
+    NUMERIC_I16,
+    NUMERIC_U16,
 
     NUMERIC_I32,  // 32-bit int
+    NUMERIC_U32,
     NUMERIC_F32,  // 32-bit float, ~7 decimal digits
+
+    NUMERIC_I64,  // 64-bit integer
+    NUMERIC_U64,
+    NUMERIC_F64,  // 64-bit float, ~15 decimal digits
+
+    NUMERIC_I128,
+    NUMERIC_U128,
+    NUMERIC_F128,
 
     NUMERIC_BOOL, // i1, boolean
 } NumericKind;
@@ -49,12 +62,25 @@ typedef enum {
 typedef struct {
     NumericKind kind;
     union {
-        int64_t i64;
+
+        int8_t   i8;
+        uint8_t  u8;
+
+        int16_t  i16;
+        uint16_t u16;
+
+        int32_t  i32;
+        uint32_t u32;
+        _Float32 f32;
+
+        int64_t  i64;
+        uint64_t u64;
         _Float64 f64; // No explicit _Float64 like in C23 and double will sometimes be 32 bits but for here it's fine because I know it's 64 bits on my machine
                         // AHAHAHHAH I HAVE GCC THIS IS AMAZING
 
-        int32_t i32;
-        _Float32 f32;
+        __int128          i128;
+        unsigned __int128 u128;
+        __float128        f128;
 
         bool bivalent;
     };

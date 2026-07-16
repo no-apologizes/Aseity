@@ -94,21 +94,32 @@ static inline bool is_unicode_identifier(uint32_t cp) {
 static inline TokenType match_keyword(const char *start, size_t length) {
     // Check lengths before string eval as a normal switch over strings is impossible in C
     switch (length) {
+        case 2:
+            if (strncmp(start, "i8", 2) == 0) return TOKEN_TYPE;
+            if (strncmp(start, "u8", 2) == 0) return TOKEN_TYPE;
+            break;
         case 3:
-            if (strncmp(start, "i64", 3) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "f64", 3) == 0) return TOKEN_TYPE;
+            if (strncmp(start, "i16", 3) == 0) return TOKEN_TYPE;
+            if (strncmp(start, "u16", 3) == 0) return TOKEN_TYPE;
             if (strncmp(start, "i32", 3) == 0) return TOKEN_TYPE;
+            if (strncmp(start, "u32", 3) == 0) return TOKEN_TYPE;
             if (strncmp(start, "f32", 3) == 0) return TOKEN_TYPE;
+            if (strncmp(start, "i64", 3) == 0) return TOKEN_TYPE;
+            if (strncmp(start, "u64", 3) == 0) return TOKEN_TYPE;
+            if (strncmp(start, "f64", 3) == 0) return TOKEN_TYPE;
             if (strncmp(start, "str", 3) == 0) return TOKEN_TYPE;
             break;
         case 4:
             if (strncmp(start, "bool", 4) == 0) return TOKEN_TYPE;
             if (strncmp(start, "drop", 4) == 0) return TOKEN_DROP;
+            if (strncmp(start, "i128", 4) == 0) return TOKEN_TYPE;
+            if (strncmp(start, "u128", 4) == 0) return TOKEN_TYPE;
+            if (strncmp(start, "f128", 4) == 0) return TOKEN_TYPE;
             break;
         case 6:
             if (strncmp(start, "return", 6) == 0) return TOKEN_RETURN;
             break;
-        default: ;
+        default: break;
     }
     return TOKEN_IDENTIFIER;
 }
