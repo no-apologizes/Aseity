@@ -5,25 +5,33 @@
 
 // Numbers
 typedef enum {
-    TOKEN_NUMBER,
-    TOKEN_OPERATOR,
-    TOKEN_PLUS, TOKEN_MINUS, TOKEN_MUL, TOKEN_DIV,  // + - * /
-    TOKEN_EQUALS,                                   // =
-    TOKEN_IDENTIFIER, TOKEN_TERM, TOKEN_DROP,       //
-    TOKEN_TYPE,                                     // Type keyword, e.g., i64, f32, etc.
-    TOKEN_LPAREN, TOKEN_RPAREN,                     // ( and )
-    TOKEN_LBRACKET, TOKEN_RBRACKET,                 // [ and ]
-    TOKEN_LBRACE, TOKEN_RBRACE,                     // { and }
-    TOKEN_COLON,                                    // :
-    TOKEN_COMMA,                                    // ,
-    TOKEN_PERIOD,
-    TOKEN_RETURN,                                   // return keyword
     TOKEN_EOF,
-
+    TOKEN_NUMBER_LIT,                   // TODO: Add the thing here
     TOKEN_UNKNOWN,
-    NUM_STR,  // i8*, string pointer
-    TOKEN_STRING_LIT,
-    TOKEN_CHAR_LIT
+    TOKEN_TYPE,                     // Type keyword, e.g., i64, f32, etc.
+    TOKEN_OPERATOR,
+
+    //TOKEN_EXP or POW
+    TOKEN_MUL,                      // *
+    TOKEN_DIV,                      // /
+    TOKEN_PLUS,                     // +
+    TOKEN_MINUS,                    // -
+
+    TOKEN_EQUALS,                   // =
+    TOKEN_IDENTIFIER,
+    TOKEN_TERM,                     // |
+    TOKEN_DROP,
+    TOKEN_LPAREN, TOKEN_RPAREN,     // ( and )
+    TOKEN_LBRACKET, TOKEN_RBRACKET, // [ and ]
+    TOKEN_LBRACE, TOKEN_RBRACE,     // { and }
+    TOKEN_COLON,                    // :
+    TOKEN_COMMA,                    // ,
+    TOKEN_PERIOD,                   // .
+    TOKEN_RETURN,                   // return keyword
+
+    TOKEN_STRING_LIT,               // " Example "
+    TOKEN_CHAR_LIT,                 // '\n'
+    NUM_STR                         // i8*, string pointer
 } TokenType;
 
 // Numeric Literals

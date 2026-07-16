@@ -60,7 +60,7 @@ static inline void skip_whitespace(void) {
 
 static inline uint32_t decode_utf8(const char* src, int* out_bytes) {
     const unsigned char* c = (const unsigned char*)src;
-    unsigned char lead = c[0];
+    const unsigned char lead = c[0];
 
     if (likely(lead < 0x80)) {
         *out_bytes = 1;
@@ -75,7 +75,7 @@ static inline uint32_t decode_utf8(const char* src, int* out_bytes) {
         return ((lead & 0x0F) << 12) | ((c[1] & 0x3F) << 6) | (c[2] & 0x3F);
     }
     *out_bytes = 4;
-    return ((lead & 0x07) << 18) | ((c[1] & 0x3F) << 12) | ((c[2] & 0x3F) << 6) | (c[3] & 0x3F);
+    return ((lead & 0x07) << 18) | ((c[1] & 0x3F) << 12) | ((c[2] & 0x3F) << 6) | (c[3] & 0x3F); // I don't remember
 }
 
 static inline bool is_unicode_operator(uint32_t cp) {
@@ -108,6 +108,7 @@ static inline TokenType match_keyword(const char *start, size_t length) {
         case 6:
             if (strncmp(start, "return", 6) == 0) return TOKEN_RETURN;
             break;
+        default: ;
     }
     return TOKEN_IDENTIFIER;
 }
@@ -125,7 +126,7 @@ Token lexer_next_token(void) {
             if (i >= '0' && i <= '9') { // Digits
                 dispatch_table[i] = &&lex_digit;
             } else if ((i >= 'a' && i <= 'z') || (i >= 'A' && i <= 'Z') || i == '_') {
-                dispatch_table[i] = &&lex_alpha; // Leters
+                dispatch_table[i] = &&lex_alpha; // Letters
             } else if (i >= 128) {
                 // Because every UTF-8 char starts with a byte value of 128 or higher, we can assign slots 128 to 255 in the jump table to the utf-8 label
                 dispatch_table[i] = &&lex_utf8;
@@ -139,6 +140,10 @@ Token lexer_next_token(void) {
         dispatch_table['+']  = &&lex_plus;
         dispatch_table['-']  = &&lex_minus;
         dispatch_table['*']  = &&lex_mul;
+        dispatch_table['<']  = &&lex_operator;
+        dispatch_table['>']  = &&lex_operator;
+        dispatch_table['!']  = &&lex_operator;
+        dispatch_table['%']  = &&lex_operator;
         dispatch_table['/']  = &&lex_div;
         dispatch_table['|']  = &&lex_term;
         dispatch_table['(']  = &&lex_lparen;
@@ -168,6 +173,7 @@ Token lexer_next_token(void) {
 
     goto *dispatch_table[(unsigned char)c];
 
+lex_operator: advance(); token.length = 1; token.type = TOKEN_OPERATOR; return token;
 lex_equals:   advance(); token.length = 1; token.type = TOKEN_EQUALS;   return token;
 lex_plus:     advance(); token.length = 1; token.type = TOKEN_PLUS;     return token;
 lex_minus:    advance(); token.length = 1; token.type = TOKEN_MINUS;    return token;
@@ -186,7 +192,7 @@ lex_comma:    advance(); token.length = 1; token.type = TOKEN_COMMA;    return t
 lex_period: {
     if (S.cursor[1] == '/') { // Check for a '/'
         advance(); // Consume '.'
-        advance(); // Consime '/'
+        advance(); // Consume '/'
 
         while (1) {
             char current = peek();
@@ -219,7 +225,7 @@ lex_string: {
         char current = peek();
         if (unlikely(current == '\0')) {
             token.type = TOKEN_UNKNOWN; // Catch unclosed file term errors
-            token.length = S.cursor - token.start;
+            token.length = (size_t)(S.cursor - token.start);
             return token;
         }
         if (current == '"') {
@@ -232,7 +238,7 @@ lex_string: {
         } else {
             advance(); // Process a standard uniform string
         }}
-    token.length = S.cursor - token.start;
+    token.length = (size_t)(S.cursor - token.start);
     token.type = TOKEN_STRING_LIT;
     return token;
 }
@@ -242,7 +248,7 @@ lex_char: {
     char current = peek();
     if (unlikely(current == '\0' || current == '\'')) {
         token.type = TOKEN_UNKNOWN; // Flag malformed or empty numeric literals
-        token.length = S.cursor - token.start; // I love writing this over and over again
+        token.length = (size_t)(S.cursor - token.start);
         if (current == '\'') advance();
         return token;
     }
@@ -260,7 +266,7 @@ lex_char: {
     if (peek() == '\'') {
         advance(); // Consume closing '\'
     }
-    token.length = S.cursor - token.start;
+    token.length = (size_t)(S.cursor - token.start);
     token.type = TOKEN_CHAR_LIT;
     return token;
 }
@@ -289,8 +295,8 @@ lex_digit: {
                     break;
                 }}}
     }
-    token.length = S.cursor - token.start;
-    token.type = TOKEN_NUMBER;
+    token.length = (size_t)(S.cursor - token.start);
+    token.type = TOKEN_NUMBER_LIT;
     return token;
 }
 
@@ -306,7 +312,7 @@ lex_utf8: {
     if (is_unicode_operator(cp)) {
         S.cursor += bytes;
         S.column += 1;
-        token.length = S.cursor - token.start;
+        token.length = (size_t)(S.cursor - token.start);
         token.type = TOKEN_OPERATOR;
         return token;
     }
@@ -316,7 +322,7 @@ lex_utf8: {
         goto consume_identifier;
     }
     S.cursor += bytes; S.column += 1;
-    token.length = S.cursor - token.start;
+    token.length = (size_t)(S.cursor - token.start);
     token.type = TOKEN_UNKNOWN;
     return token;
 }
@@ -329,8 +335,8 @@ consume_identifier: {
             (next >= '0' && next <= '9') || next == '_') {
             S.cursor++;
             S.column++;
-        } 
-        // Consume multi-byte Unicode characters that qualify as words (like ℤ or ℝ)
+        }
+        // Consume multibyte Unicode characters that qualify as words (like ℤ or ℝ)
         else if (next >= 128) {
             int bytes;
             uint32_t cp = decode_utf8(S.cursor, &bytes);
@@ -339,11 +345,11 @@ consume_identifier: {
                 S.column += 1;
             } else {
                 break; // Break if the Unicode character is an operator (like ∀ or ∈)
-            }} 
+            }}
         // Stop if hit an ASCII operator, space, or a paran
         else { break; }
     }
-    token.length = S.cursor - token.start;
+    token.length = (size_t)(S.cursor - token.start);
     token.type = match_keyword(token.start, token.length);
     return token;
 }

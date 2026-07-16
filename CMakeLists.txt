@@ -9,9 +9,17 @@ find_package(LLVM REQUIRED CONFIG)
 add_executable(aseity
         main.c
         lexer.c
+        parser.c
 )
 
-target_compile_options(aseity PRIVATE -march=znver3 -O2 -Wall -Wextra)
+target_compile_options(aseity PRIVATE
+                        -march=znver3 # AMD Zen 3 Cpu architecture
+                        -O3 -std=c17
+                        -flto # Link-time optimization
+                        -fno-strict-aliasing # Pointers of different types can point to the same memory location
+                        -Wall -Wextra -Wshadow -ggdb3  # Errors
+                        #-Wconversion -Wpedantic
+                        )
 
 target_include_directories(aseity PRIVATE
         ${CMAKE_SOURCE_DIR}/Headers
