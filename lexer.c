@@ -67,15 +67,26 @@ static inline uint32_t decode_utf8(const char* src, int* out_bytes) {
         return lead;
     }
     if ((lead & 0xE0) == 0xC0) {
+        if (unlikely(c[1] == '\0')) goto malformed; // Bounds check
         *out_bytes = 2;
         return ((lead & 0x1F) << 6) | (c[1] & 0x3F);
     }
     if ((lead & 0xF0) == 0xE0) {
+        if (unlikely(c[1] == '\0' || c[2] == '\0')) goto malformed; // Bounds check
         *out_bytes = 3;
         return ((lead & 0x0F) << 12) | ((c[1] & 0x3F) << 6) | (c[2] & 0x3F);
     }
-    *out_bytes = 4;
-    return ((lead & 0x07) << 18) | ((c[1] & 0x3F) << 12) | ((c[2] & 0x3F) << 6) | (c[3] & 0x3F); // I don't remember
+    // Added proper F8 mask for 4-byte chars
+    if ((lead & 0xF8) == 0xF0) {
+        if (unlikely(c[1] == '\0' || c[2] == '\0' || c[3] == '\0')) goto malformed; // Bounds check
+        *out_bytes = 4;
+        return ((lead & 0x07) << 18) | ((c[1] & 0x3F) << 12) | ((c[2] & 0x3F) << 6) | (c[3] & 0x3F);
+    }
+
+    malformed:
+    // If we hit EOF unexpectedly, consume 1 byte and return replacement char
+    *out_bytes = 1;
+    return 0xFFFD;
 }
 
 static inline bool is_unicode_operator(uint32_t cp) {
@@ -226,7 +237,7 @@ lex_period: {
     }
     advance();
     token.length = 1;
-    token.type = TOKEN_UNKNOWN;
+    token.type = TOKEN_PERIOD;
     return token;
 }
 
@@ -246,6 +257,12 @@ lex_string: {
         if (unlikely(current == '\\')) {
             advance(); // Skip backslash character escape
             advance(); // Skip nested escape sequence
+        }
+        if ((unsigned char)current >= 128) {
+            int bytes;
+            decode_utf8(S.cursor, &bytes);
+            S.cursor += bytes; // Move cursor past the multi-byte character
+            S.column += 1;     // Only increment the visual column by 1
         } else {
             advance(); // Process a standard uniform string
         }}
@@ -342,7 +359,7 @@ consume_identifier: {
     while (1) {
         unsigned char next = (unsigned char)peek();
         // Consume standard valid alphanumeric ASCII characters
-        if ((next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z') || 
+        if ((next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z') ||
             (next >= '0' && next <= '9') || next == '_') {
             S.cursor++;
             S.column++;

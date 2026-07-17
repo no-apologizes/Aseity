@@ -114,7 +114,7 @@ ASTNode *parse_next_statement(void) {
 
         [TOKEN_COLON] = &&parse_ignore,
         [TOKEN_COMMA] = &&parse_ignore,
-        [TOKEN_PERIOD] = &&parse_ignore,
+        [TOKEN_PERIOD] = &&parse_period,
         [TOKEN_RETURN] = &&parse_return,
 
         [TOKEN_STRING_LIT] = &&parse_literal,
@@ -172,8 +172,18 @@ parse_lparen: {
 }
 
 parse_rparen: {
-    ASTNode *args = parser_pop(&P);
-    ASTNode *marker = parser_pop(&P);
+    ASTNode *args = NULL;
+    ASTNode *marker = NULL;
+
+    // Check is parens are empty: add() <-
+    if (P.stack_top > 0 && P.stack[P.stack_top - 1]->type == NODE_UNKNOWN &&
+        ((MarkerNode*)P.stack[P.stack_top - 1])->marker == MARKER_LPAREN) {
+            // Empty args
+            marker = parser_pop(&P);
+    } else {
+            args = parser_pop(&P);
+            marker = parser_pop(&P);
+    }
 
     if (marker->type != NODE_UNKNOWN || ((MarkerNode*)marker)->marker != MARKER_LPAREN) {
         fprintf(stderr, "Syntax Error(parser): Open parenthesis on line %d\n", t.line);
@@ -181,7 +191,7 @@ parse_rparen: {
     }
     free(marker);
 
-    // Check for UFCS method call: reciver period method ( args )
+    // Check for UFCS method call: receiver period method ( args )
     if (P.stack_top >= 2 &&
         P.stack[P.stack_top - 1]->type == NODE_IDENTIFIER &&
         P.stack[P.stack_top - 2]->type == NODE_UNKNOWN &&
@@ -200,13 +210,28 @@ parse_rparen: {
 
         free(method_id);
         parser_push(&P, call_node);
-        } else {
-            // Standard mathmatical grouping parens
-            parser_push(&P, args);
-        }
+    }
 
-        t = lexer_next_token();
-        goto *dispatch[t.type];
+    // Check for standard function call: function( args )
+    else if (P.stack_top >= 1 &&
+             P.stack[P.stack_top - 1]->type == NODE_IDENTIFIER) {
+        ASTNode *func_id = parser_pop(&P);
+
+        ASTNode *call_node = allocate_node(NODE_CALL, t);
+        strncpy(call_node->call_stmt.func_name, func_id->var_decl.var_name, MAX_VAR_LENGTH - 1);
+        call_node->call_stmt.receiver = NULL; // No reciver for standard calls
+        call_node->call_stmt.args     = args;
+
+        free(func_id);
+        parser_push(&P, call_node);
+    }
+    else {
+        // Standard mathmatical grouping parens
+        parser_push(&P, args);
+    }
+
+    t = lexer_next_token();
+    goto *dispatch[t.type];
 }
 
 parse_lbracket: {
@@ -231,7 +256,7 @@ parse_rbracket: {
             break;
         }
         // Exponential memory realloc of O(something)
-        if (count >= capacity) {
+        if (count >= capacity ) {//&& stmts[count] != NULL) {
             capacity *= 2;
             stmts = realloc(stmts, capacity * sizeof(ASTNode*));
         }
@@ -276,6 +301,12 @@ parse_binop: {
     node->binop.left = parser_pop(&P);
     // Push reduced subtree back onto stack
     parser_push(&P, node);
+    t = lexer_next_token();
+    goto *dispatch[t.type];
+}
+
+parse_period: {
+    parser_push(&P, allocate_marker(MARKER_PERIOD, t));
     t = lexer_next_token();
     goto *dispatch[t.type];
 }
@@ -371,6 +402,10 @@ parse_term: {
             ASTNode *check = P.stack[i - 1];
             if (check->type == NODE_UNKNOWN) {
                 BlockMarker m = ((MarkerNode*)check)->marker;
+
+                // Stop scanning if we hit a scope boundary
+                if (m == MARKER_LBRACKET) { break; }
+
                 if (m == MARKER_IF || m == MARKER_ELSE || m == MARKER_AS) {
                     fprintf(stderr, "Compiler Error(parser): Malformed control flow statement after line %d.\n", t.line);
                     exit(EXIT_FAILURE);
@@ -445,6 +480,11 @@ void free_ast(ASTNode *node) {
         case NODE_AS_LOOP:
             free_ast(node->as_loop.condition);
             free_ast(node->as_loop.body_block);
+            break;
+
+        case NODE_CALL:
+            if (node->call_stmt.receiver) free_ast(node->call_stmt.receiver);
+            if (node->call_stmt.args) free_ast(node->call_stmt.args);
             break;
 
         case NODE_RETURN:

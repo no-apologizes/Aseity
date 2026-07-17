@@ -1,6 +1,7 @@
 #include "Headers/lexer.h"
 #include "Headers/parser.h"
 #include "Headers/ast.h"
+#include "Headers/symbol_table.h"
 #include <stdio.h>
 
 static void print_ast(const ASTNode *node, int indent) {
@@ -75,8 +76,8 @@ int main(void) {
         "bool flag = 'ℝ' |\n"
         "population 2 * return |\n"
         "as (x 6 <) [\n"
-        "   print(x ℤ ∈)|\n"
-        "   if (x 5 -) 10 20 [\n"
+        "   print(ℕ)|\n"
+        "   if (x 5 -) [\n"
         "      0 return|\n"
         "   ]|\n"
         "   i64 x = x 1 +|\n"
@@ -87,13 +88,16 @@ int main(void) {
 
     lexer_init(test_script);
 
+    SymbolTable *st = symbol_table_create();
     ASTNode *node = NULL;
-    int statement_count = 1;
+    //int statement_count = 1;
 
     while ((node = parse_next_statement()) != NULL) {
-        printf("--- Statement %d ---\n", statement_count++);
+        // Run semantic pass over parsed statement
+        semantic_analyze(st, node);
+
+        // Print and free AST
         print_ast(node, 0);
-        printf("\n");
         free_ast(node);
     }
 
