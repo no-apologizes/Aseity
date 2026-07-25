@@ -1,13 +1,20 @@
 #pragma once
 #include "lexer.h"
+#include <stddef.h>
 
 // The longest a variable's name can be, 63 max including the \0
 #define MAX_VAR_LENGTH 64
+
+// i128 = 4
+// But rounded up to 8
+#define LONGEST_RETURN_TYPE 8
 
 typedef enum {
     NODE_LITERAL,      // Literals, numbers, chars
     NODE_IDENTIFIER,   // Var or function names
     NODE_BINOP,        // Binary Operators
+    NODE_FUNC_DECL,    // Function declaration
+    NODE_PARAM_LIST,   // Function parameters
     NODE_VAR_DECL,     // Declarations (i64 a = ...)
     NODE_BLOCK,        // Code enclosed in brackets [ ... ]
     NODE_IF,           // Conditionals
@@ -39,6 +46,19 @@ struct ASTNode {
             ASTNode *right;
             TokenType op_type;
         } binop;
+
+        struct {
+            char return_type[LONGEST_RETURN_TYPE];
+            char func_name[MAX_VAR_LENGTH];
+            ASTNode *params;
+            ASTNode *body;
+        } func_decl;
+
+        struct {
+            ASTNode **params;
+            size_t count;
+            size_t capacity;
+        } param_list;
 
         // Explicit type vars: i64 a = ...
         struct {

@@ -1,4 +1,5 @@
 #include "Headers/symbol_table.h"
+#include "Headers/arena.h"
 #include "Headers/ast.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -22,15 +23,10 @@ static inline uint32_t hash_symbol(const char *str) {
 
 // Scope stack management
 SymbolTable *symbol_table_create(void) {
-    SymbolTable *iUseAIicheatOnmyschoolAssignments = malloc(sizeof(SymbolTable));
-    if (unlikely(!iUseAIicheatOnmyschoolAssignments)) {
-        fprintf(stderr, "Compiler Error(semantic): Out of memory creating Symbol Table\n");
-        exit(EXIT_FAILURE);
-    }
+    SymbolTable *iUseAIicheatOnmyschoolAssignments = arena_alloc_recyclable(&symbol_arena, sizeof(SymbolTable));
     iUseAIicheatOnmyschoolAssignments->current_scope = NULL;
     iUseAIicheatOnmyschoolAssignments->global_scope  = NULL;
 
-    // Create root global scope
     symbol_table_push_scope(iUseAIicheatOnmyschoolAssignments);
     iUseAIicheatOnmyschoolAssignments->global_scope = iUseAIicheatOnmyschoolAssignments->current_scope;
     return iUseAIicheatOnmyschoolAssignments;
@@ -40,15 +36,11 @@ void symbol_table_destroy(SymbolTable *st) {
     while (st->current_scope) {
         symbol_table_pop_scope(st);
     }
-    free(st);
+    arena_free_recyclable(&symbol_arena, st, sizeof(SymbolTable));
 }
 
 void symbol_table_push_scope(SymbolTable *st) {
-    Scope *scope = malloc(sizeof(Scope));
-    if (unlikely(!scope)) {
-        fprintf(stderr, "Compiler Error(semantic): Out of memory creating Scope\n");
-        exit(EXIT_FAILURE);
-    }
+    Scope *scope = arena_alloc_recyclable(&symbol_arena, sizeof(Scope));
     memset(scope, 0, sizeof(Scope));
     scope->parent = st->current_scope;
     scope->depth = st->current_scope ? st->current_scope->depth + 1 : 0;
@@ -66,11 +58,11 @@ void symbol_table_pop_scope(SymbolTable *st) {
         Symbol *sym = old_scope->buckets[i];
         while (sym) {
             Symbol *next = sym->next;
-            free(sym);
+            arena_free_recyclable(&symbol_arena, sym, sizeof(Symbol));
             sym = next;
         }
     }
-    free(old_scope);
+    arena_free_recyclable(&symbol_arena, old_scope, sizeof(Scope));
 }
 
 // Symbol Ops
@@ -82,11 +74,8 @@ bool symbol_table_insert(SymbolTable *st, const char *name, const char *type_nam
     }
 
     uint32_t idx = hash_symbol(name);
-    Symbol *sym = malloc(sizeof(Symbol));
-    if (unlikely(!sym)) {
-        fprintf(stderr, "Compiler Error(semantic): Out of memory allocating Symbol\n");
-        exit(EXIT_FAILURE);
-    }
+    Symbol *sym = arena_alloc_recyclable(&symbol_arena, sizeof(Symbol));
+
     strncpy(sym->name, name, MAX_VAR_LENGTH - 1);
     sym->name[MAX_VAR_LENGTH - 1] = '\0';
 
@@ -132,6 +121,10 @@ Symbol *symbol_table_lookup_current(SymbolTable *st, const char *name) {
 }
 
 // Semantic analysis AST Pass
+// So, because semantic analysis is a hierachal tree walk the control has to return to the parent node after validating its children, the analysis relies on std C func calls (call and ret instructions)
+// The tiny cost of dispatching the node inside a recursive function doesn't remove the recursive calls
+// And direct threading doesn't work on trees as lexing and parsing are just linear streams
+// *disgrading the fact that gcc with -03 automatically lowers a switch (node->type) into a hardware jump table anyways.
 void semantic_analyze(SymbolTable *st, ASTNode *node) {
     if (!node) return;
 
@@ -153,6 +146,30 @@ void semantic_analyze(SymbolTable *st, ASTNode *node) {
         case NODE_BINOP:
             semantic_analyze(st, node->binop.left);
             semantic_analyze(st, node->binop.right);
+            break;
+
+        case NODE_FUNC_DECL:
+            // Register function in global scope
+            if (!symbol_table_insert(st, node->func_decl.func_name, node->func_decl.return_type, node->token.line)) exit(EXIT_FAILURE);
+
+            symbol_table_push_scope(st); // Enter func scope
+            semantic_analyze(st, node->func_decl.params); // Loads params into scope
+
+            ASTNode *body = node->func_decl.body;
+            for (size_t i = 0; i < body->block.count; i++) {
+                semantic_analyze(st, body->block.statements[i]);
+            }
+            symbol_table_pop_scope(st); // Exit function scope
+            break;
+
+        case NODE_PARAM_LIST:
+            // Insert parameter vars into active scope
+            for (size_t i = 0; i < node->param_list.count; i++) {
+                ASTNode *param = node->param_list.params[i];
+                if (param->type == NODE_VAR_DECL) {
+                    if (!symbol_table_insert(st, param->var_decl.var_name, param->var_decl.type_name, param->token.line)) exit(EXIT_FAILURE);
+                }
+            }
             break;
 
         case NODE_VAR_DECL:

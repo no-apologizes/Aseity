@@ -2,6 +2,7 @@
 #include "Headers/parser.h"
 #include "Headers/ast.h"
 #include "Headers/symbol_table.h"
+#include "Headers/arena.h"
 #include <stdio.h>
 
 static void print_ast(const ASTNode *node, int indent) {
@@ -64,6 +65,25 @@ static void print_ast(const ASTNode *node, int indent) {
             print_ast(node->ret_stmt.expr, indent + 1);
             break;
 
+        case NODE_FUNC_DECL:
+            printf("FUNC_DECL [Returns: %s, Name: %s]\n", node->func_decl.return_type, node->func_decl.func_name);
+            print_ast(node->func_decl.params, indent + 1);
+            print_ast(node->func_decl.body, indent + 1);
+            break;
+
+        case NODE_PARAM_LIST:
+            printf("PARAMS (%zu):\n", node->param_list.count);
+            for (size_t i = 0; i < node->param_list.count; i++) {
+                print_ast(node->param_list.params[i], indent + 1);
+            }
+            break;
+
+        case NODE_CALL: // Fixes the UNKNOWN NODE 'bug'
+            printf("CALL: %s()\n", node->call_stmt.func_name);
+            if (node->call_stmt.receiver) print_ast(node->call_stmt.receiver, indent + 1);
+            print_ast(node->call_stmt.args, indent + 1);
+            break;
+
         default:
             printf("UNKNOWN NODE\n");
             break;
@@ -71,35 +91,41 @@ static void print_ast(const ASTNode *node, int indent) {
 }
 
 int main(void) {
+    arena_init(&ast_arena);
+    arena_init(&symbol_arena);
+
     const char *test_script =
         "str msg = \"Data payload: \\\"Aseity\\\"\\n\" |\n"
         "bool flag = 'ℝ' |\n"
-        "population 2 * return |\n"
+        "i64 add(a: i64, b: i64) [\n"
+        "   i64 c = a b +|\n"
+        "   c return|"
+        "]"
+        "i64 x = 1|\n"
         "as (x 6 <) [\n"
-        "   print(ℕ)|\n"
-        "   if (x 5 -) [\n"
-        "      0 return|\n"
-        "   ]|\n"
+        "   add(x 1)|\n"
+        "   2 2 add()|\n"
+        "   2.add(2)|\n"
         "   i64 x = x 1 +|\n"
         "]|";
 
-    printf("≛≛≛ Test Script ≛≛≛\n%s\n", test_script); // Star equals :)
-    printf("≛≛≛ AST Parser Output ≛≛≛\n\n");
+    printf("=== Test Script ===\n%s\n", test_script);
+    printf("=== AST Parser Output ===\n\n");
 
     lexer_init(test_script);
 
     SymbolTable *st = symbol_table_create();
     ASTNode *node = NULL;
-    //int statement_count = 1;
 
     while ((node = parse_next_statement()) != NULL) {
-        // Run semantic pass over parsed statement
         semantic_analyze(st, node);
-
-        // Print and free AST
         print_ast(node, 0);
-        free_ast(node);
+        // Memory is automatically reclaimed by the arena
     }
+
+    // Teardown arenas on program exit
+    arena_destroy(&symbol_arena);
+    arena_destroy(&ast_arena);
 
     return 0;
 }

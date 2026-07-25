@@ -10,6 +10,7 @@ typedef struct Symbol{
     char type_name[MAX_VAR_LENGTH]; // 'i64'
     int line_declared;              // Line ∲
     struct Symbol *next;            // Pointer for hash collisions (Open chaining)
+    void *llvm_value                // Tracks llvm alloca
 } Symbol;
 
 typedef struct Scope {

@@ -11,6 +11,7 @@ add_executable(aseity
         lexer.c
         parser.c
         symbol_table.c
+        arena.c
 )
 
 target_compile_options(aseity PRIVATE

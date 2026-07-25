@@ -1,4 +1,5 @@
 #include "Headers/parser.h"
+#include "Headers/arena.h"
 #include "Headers/ast.h"
 #include "Headers/lexer.h"
 #include <stdbool.h>
@@ -25,11 +26,14 @@ typedef struct {
 typedef enum {
     MARKER_NONE,
     MARKER_LPAREN,
+    MARKER_LBRACE,
     MARKER_LBRACKET,
+    MARKER_COLON,
+    MARKER_COMMA,
+    MARKER_PERIOD,
     MARKER_IF,
     MARKER_ELSE,
     MARKER_AS,
-    MARKER_PERIOD
 } BlockMarker;
 
 typedef struct {
@@ -56,12 +60,8 @@ static inline ASTNode *parser_pop(ParserState *P) {
 
 // Mem alloc helper
 static inline ASTNode *allocate_node(ASTNodeType type, Token t) {
-    //ASTNode *node = calloc(1, sizeof(ASTNode));
-    ASTNode *node = malloc(sizeof(ASTNode));
-    if (unlikely(!node)) {
-        fprintf(stderr, "Compiler Error(parser): Out of memory allocating ASTNode\n");
-        exit(EXIT_FAILURE);
-    }
+    // Allocate from transient arena
+    ASTNode *node = arena_alloc_transient(&ast_arena, sizeof(ASTNode));
     memset(node, 0, sizeof(ASTNode));
     node->type = type;
     node->token = t;
@@ -70,11 +70,8 @@ static inline ASTNode *allocate_node(ASTNodeType type, Token t) {
 
 // Sentinel marker helper
 static inline ASTNode *allocate_marker(BlockMarker marker_type, Token t) {
-    MarkerNode *m_node = malloc(sizeof(MarkerNode));
-        if (unlikely(!m_node)) {
-        fprintf(stderr, "Compiler Error(parser): Out of memory allocating MarkerNode\n");
-        exit(EXIT_FAILURE);
-    }
+    // Allocate from transient arena
+    MarkerNode *m_node = arena_alloc_transient(&ast_arena, sizeof(MarkerNode));
     memset(m_node, 0, sizeof(MarkerNode));
     m_node->base.type = NODE_UNKNOWN;
     m_node->base.token = t;
@@ -82,7 +79,7 @@ static inline ASTNode *allocate_marker(BlockMarker marker_type, Token t) {
     return (ASTNode*)m_node;
 }
 
-// Shift-Reduce Parser, 01:43
+// Shift-Reduce Parser, 01:43 - 04:00, took me four hours
 // Oh boy this will be fun
 ASTNode *parse_next_statement(void) {
     // Jump table mapping to TokenType int values
@@ -110,7 +107,7 @@ ASTNode *parse_next_statement(void) {
         [TOKEN_RBRACKET] = &&parse_rbracket,
 
         [TOKEN_LBRACE] = &&parse_ignore,
-        [TOKEN_RBRACE] = &&parse_ignore,
+        [TOKEN_RBRACE] = &&parse_rbrace,
 
         [TOKEN_COLON] = &&parse_ignore,
         [TOKEN_COMMA] = &&parse_ignore,
@@ -129,6 +126,10 @@ ASTNode *parse_next_statement(void) {
 
     // Entry hop
     goto *dispatch[t.type];
+
+parse_colon:  parser_push(&P, allocate_marker(MARKER_COLON, t));  t = lexer_next_token(); goto *dispatch[t.type];
+parse_comma:  parser_push(&P, allocate_marker(MARKER_COMMA, t));  t = lexer_next_token(); goto *dispatch[t.type];
+parse_lbrace: parser_push(&P, allocate_marker(MARKER_LBRACE, t)); t = lexer_next_token(); goto *dispatch[t.type];
 
 parse_literal: {
     ASTNode *node = allocate_node(NODE_LITERAL, t);
@@ -160,7 +161,32 @@ parse_type: {
     size_t len = t.length < (MAX_VAR_LENGTH - 1) ? t.length : (MAX_VAR_LENGTH - 1);
     strncpy(node->var_decl.type_name, t.start, len);
     node->var_decl.type_name[len] = '\0';
+
+    // Param reduction check: identifier : type
+    if (P.stack_top >= 2 &&
+        P.stack[P.stack_top - 1]->type == NODE_UNKNOWN && ((MarkerNode*)P.stack[P.stack_top - 1])->marker == MARKER_COLON &&
+        P.stack[P.stack_top - 2]->type == NODE_IDENTIFIER) {
+
+        parser_pop(&P); // Pop MARKER_COLON
+        ASTNode *id_node = parser_pop(&P); // Pop identifier
+        strncpy(node->var_decl.var_name, id_node->var_decl.var_name, MAX_VAR_LENGTH - 1);
+    }
+
     parser_push(&P, node);
+    t = lexer_next_token();
+    goto *dispatch[t.type];
+}
+
+parse_rbrace: {
+    // Check for array syntax: str { }
+    if (P.stack_top >= 2 &&
+        P.stack[P.stack_top - 1]->type == NODE_UNKNOWN && ((MarkerNode*)P.stack[P.stack_top - 1])->marker == MARKER_LBRACE &&
+        P.stack[P.stack_top - 2]->type == NODE_VAR_DECL) {
+
+        parser_pop(&P); // Pop MARKER_LBRACE
+        ASTNode *decl = P.stack[P.stack_top - 1];
+        strncat(decl->var_decl.type_name, "{}", MAX_VAR_LENGTH - strlen(decl->var_decl.type_name) - 1); // Idk, I looked up strncat and I still don't know what this does
+    }
     t = lexer_next_token();
     goto *dispatch[t.type];
 }
@@ -172,62 +198,79 @@ parse_lparen: {
 }
 
 parse_rparen: {
-    ASTNode *args = NULL;
-    ASTNode *marker = NULL;
+    size_t capacity = 4;
+    ASTNode **args = arena_alloc_transient(&ast_arena, capacity * sizeof(ASTNode));
+    size_t count = 0;
+    bool found_lparen = false;
 
-    // Check is parens are empty: add() <-
-    if (P.stack_top > 0 && P.stack[P.stack_top - 1]->type == NODE_UNKNOWN &&
-        ((MarkerNode*)P.stack[P.stack_top - 1])->marker == MARKER_LPAREN) {
-            // Empty args
-            marker = parser_pop(&P);
-    } else {
-            args = parser_pop(&P);
-            marker = parser_pop(&P);
+    while (P.stack_top > 0) {
+        ASTNode *top = P.stack[P.stack_top - 1];
+        if (top->type == NODE_UNKNOWN && ((MarkerNode*)top)->marker == MARKER_LPAREN) {
+            P.stack_top--;
+            found_lparen = true;
+            break;
+        }
+
+        ASTNode *node = parser_pop(&P);
+        if (node->type == NODE_UNKNOWN && ((MarkerNode*)node)->marker == MARKER_COMMA) continue; // Skip commas
+
+        if (count >= capacity) {
+            size_t old_cap = capacity;
+            capacity *= 2;
+            ASTNode **new_args = arena_alloc_transient(&ast_arena, capacity * sizeof(ASTNode*));
+            memcpy(new_args, args, old_cap * sizeof(ASTNode*));
+            args = new_args;
+        }
+        args[count++] = node;
     }
 
-    if (marker->type != NODE_UNKNOWN || ((MarkerNode*)marker)->marker != MARKER_LPAREN) {
-        fprintf(stderr, "Syntax Error(parser): Open parenthesis on line %d\n", t.line);
+    if (!found_lparen) {
+        fprintf(stderr, "Syntax Error(parser): Unmatched ')' on line %d\n", t.line);
         exit(EXIT_FAILURE);
     }
-    free(marker);
 
-    // Check for UFCS method call: receiver period method ( args )
+    // Reverse array, popping yielded (S_n ... S_1), we need (S_1 ... S_n)
+    for (size_t i = 0; i < count / 2; i++) {
+        ASTNode *tmp = args[i];
+        args[i] = args[count - 1 - i];
+        args[count - 1 - i] = tmp;
+    }
+
+    ASTNode *param_node = allocate_node(NODE_PARAM_LIST, t);
+    param_node->param_list.params = args;
+    param_node->param_list.count = count;
+    param_node->param_list.capacity = capacity;
+    // Check for function declaration: type identifier params
     if (P.stack_top >= 2 &&
         P.stack[P.stack_top - 1]->type == NODE_IDENTIFIER &&
-        P.stack[P.stack_top - 2]->type == NODE_UNKNOWN &&
-        ((MarkerNode*)P.stack[P.stack_top - 2])->marker == MARKER_PERIOD) {
-
-        ASTNode *method_id  = parser_pop(&P);
-        ASTNode *dot_marker = parser_pop(&P);
-        ASTNode *receiver   = parser_pop(&P);
-
-        free(dot_marker);
+        P.stack[P.stack_top - 2]->type == NODE_VAR_DECL) {
+        parser_push(&P, param_node);
+    }
+    // Check for standard function call: function( args )
+    else if (P.stack_top >= 1 && P.stack[P.stack_top - 1]->type == NODE_IDENTIFIER) {
+        ASTNode *func_id = parser_pop(&P);
+        ASTNode *call_node = allocate_node(NODE_CALL, t);
+        strncpy(call_node->call_stmt.func_name, func_id->var_decl.var_name, MAX_VAR_LENGTH - 1);
+        call_node->call_stmt.receiver = NULL; // No reciver for standard calls
+        call_node->call_stmt.args = param_node;
+        parser_push(&P, call_node);
+    }
+    // Check for UFCS method call: receiver period method ( args )
+    else if (P.stack_top >= 2 && P.stack[P.stack_top - 1]->type == NODE_IDENTIFIER &&
+            P.stack[P.stack_top - 2]->type == NODE_UNKNOWN && ((MarkerNode*)P.stack[P.stack_top - 2])->marker == MARKER_PERIOD) {
+        ASTNode *method_id = parser_pop(&P);
+        parser_pop(&P); // Pop period
+        ASTNode *receiver = parser_pop(&P);
 
         ASTNode *call_node = allocate_node(NODE_CALL, t);
         strncpy(call_node->call_stmt.func_name, method_id->var_decl.var_name, MAX_VAR_LENGTH - 1);
         call_node->call_stmt.receiver = receiver;
-        call_node->call_stmt.args     = args;
-
-        free(method_id);
-        parser_push(&P, call_node);
-    }
-
-    // Check for standard function call: function( args )
-    else if (P.stack_top >= 1 &&
-             P.stack[P.stack_top - 1]->type == NODE_IDENTIFIER) {
-        ASTNode *func_id = parser_pop(&P);
-
-        ASTNode *call_node = allocate_node(NODE_CALL, t);
-        strncpy(call_node->call_stmt.func_name, func_id->var_decl.var_name, MAX_VAR_LENGTH - 1);
-        call_node->call_stmt.receiver = NULL; // No reciver for standard calls
-        call_node->call_stmt.args     = args;
-
-        free(func_id);
+        call_node->call_stmt.args = param_node;
         parser_push(&P, call_node);
     }
     else {
         // Standard mathmatical grouping parens
-        parser_push(&P, args);
+        if (count == 1) parser_push(&P, args[0]);
     }
 
     t = lexer_next_token();
@@ -242,7 +285,7 @@ parse_lbracket: {
 
 parse_rbracket: {
     size_t capacity = 8;
-    ASTNode **stmts = malloc(capacity * sizeof(ASTNode*));
+    ASTNode **stmts = arena_alloc_transient(&ast_arena, capacity * sizeof(ASTNode*));
     size_t count = 0;
     bool found_lbracket = false;
 
@@ -251,14 +294,16 @@ parse_rbracket: {
         ASTNode *top = P.stack[P.stack_top - 1]; // Peek top of stack
         if (top->type == NODE_UNKNOWN && ((MarkerNode*)top)->marker == MARKER_LBRACKET) {
             P.stack_top--;
-            free(top);
             found_lbracket = true;
             break;
         }
         // Exponential memory realloc of O(something)
         if (count >= capacity ) {//&& stmts[count] != NULL) {
+            size_t old_capacity = capacity;
             capacity *= 2;
-            stmts = realloc(stmts, capacity * sizeof(ASTNode*));
+            ASTNode **new_stmts = arena_alloc_transient(&ast_arena, capacity * sizeof(ASTNode*));
+            memcpy(new_stmts, stmts, old_capacity * sizeof(ASTNode*));
+            stmts = new_stmts;
         }
         stmts[count++] = parser_pop(&P); // Collect statement
     }
@@ -280,7 +325,34 @@ parse_rbracket: {
     block_node->block.statements = stmts;
     block_node->block.count = count;
     block_node->block.capacity = capacity;
-    parser_push(&P, block_node);
+
+    // Check for standard function decl reduction
+    if (P.stack_top >= 3 &&
+        P.stack[P.stack_top - 1]->type == NODE_PARAM_LIST &&
+        P.stack[P.stack_top - 2]->type == NODE_IDENTIFIER &&
+        P.stack[P.stack_top - 3]->type == NODE_VAR_DECL) {
+
+        ASTNode *param_list = parser_pop(&P);
+        ASTNode *func_id    = parser_pop(&P);
+        ASTNode *ret_type   = parser_pop(&P);
+
+        ASTNode *func_decl = allocate_node(NODE_FUNC_DECL, t);
+
+        // Respect the 8-byte boundary to prevent memory corruption
+        strncpy(func_decl->func_decl.return_type, ret_type->var_decl.type_name, LONGEST_RETURN_TYPE - 1);
+        func_decl->func_decl.return_type[LONGEST_RETURN_TYPE - 1] = '\0';
+
+        strncpy(func_decl->func_decl.func_name, func_id->var_decl.var_name, MAX_VAR_LENGTH - 1);
+        func_decl->func_decl.func_name[MAX_VAR_LENGTH - 1] = '\0'; // Always safe-terminate
+
+        func_decl->func_decl.params = param_list;
+        func_decl->func_decl.body = block_node;
+
+        parser_push(&P, func_decl);
+    } else {
+        // Normal block
+        parser_push(&P, block_node);
+    }
 
     t = lexer_next_token();
     goto *dispatch[t.type];
@@ -338,12 +410,10 @@ parse_term: {
         ASTNode *id_node   = parser_pop(&P); // id.              a
         ASTNode *type_node = parser_pop(&P); // type.            i64
 
-        free(eq_marker); // Free '='
         // Copy variable name string into primary decl node
         strncpy(type_node->var_decl.var_name, id_node->var_decl.var_name, MAX_VAR_LENGTH - 1);
         type_node->var_decl.value = val_node; // Attach value subtree: '1 3 +'
 
-        free(id_node); // Free id
         parser_push(&P, type_node); // Push complete NODE_VAR_DECL back onto stack
     }
     // Conditional Reduction(with if AND else block): `if (condition) [then] else [else]` <- 5 right here
@@ -358,9 +428,6 @@ parse_term: {
         ASTNode *condition  = parser_pop(&P);
         ASTNode *if_marker  = parser_pop(&P);
 
-        free(else_mrk);
-        free(if_marker);
-
         ASTNode *if_node = allocate_node(NODE_IF, t);
         if_node->if_stmt.condition  = condition;
         if_node->if_stmt.then_block = then_blk;
@@ -374,8 +441,6 @@ parse_term: {
         ASTNode *condition  = parser_pop(&P);
         ASTNode *if_marker  = parser_pop(&P);
 
-        free(if_marker);
-
         ASTNode *if_node = allocate_node(NODE_IF, t);
         if_node->if_stmt.condition  = condition;
         if_node->if_stmt.then_block = then_blk;
@@ -388,8 +453,6 @@ parse_term: {
         ASTNode *body_blk  = parser_pop(&P);
         ASTNode *condition = parser_pop(&P);
         ASTNode *as_marker = parser_pop(&P);
-
-        free(as_marker);
 
         ASTNode *as_node = allocate_node(NODE_AS_LOOP, t);
         as_node->as_loop.condition  = condition;
@@ -441,59 +504,8 @@ parse_eof:
     }
     else if (P.stack_top > 1) {
         fprintf(stderr, "Compiler Error(parser: Unexpected EOF, missing '|' terminator?\n");
-        // Clean up stranded memory to prevent leaks
-        while (P.stack_top > 0) {
-            free_ast(parser_pop(&P));
-        }
+        // Don't need to anymore as we're using arenas
         exit(EXIT_FAILURE);
     }
     return NULL;
-}
-
-// GCC under -03 actually replaces this with gotos anyways, and it does with parse_next_statement() too but I'm too pro for that
-void free_ast(ASTNode *node) {
-    if (!node) return;
-
-    switch (node->type) {
-        case NODE_BINOP:
-            free_ast(node->binop.left);
-            free_ast(node->binop.right);
-            break;
-
-        case NODE_VAR_DECL:
-            free_ast(node->var_decl.value);
-            break;
-
-        case NODE_BLOCK:
-            for (size_t i = 0; i < node->block.count; i++) {
-                free_ast(node->block.statements[i]);
-            }
-            free(node->block.statements);
-            break;
-
-        case NODE_IF:
-            free_ast(node->if_stmt.condition);
-            free_ast(node->if_stmt.then_block);
-            free_ast(node->if_stmt.else_block);
-            break;
-
-        case NODE_AS_LOOP:
-            free_ast(node->as_loop.condition);
-            free_ast(node->as_loop.body_block);
-            break;
-
-        case NODE_CALL:
-            if (node->call_stmt.receiver) free_ast(node->call_stmt.receiver);
-            if (node->call_stmt.args) free_ast(node->call_stmt.args);
-            break;
-
-        case NODE_RETURN:
-            free_ast(node->ret_stmt.expr);
-            break;
-
-        default:
-            break;
-    }
-
-    free(node);
 }
