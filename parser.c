@@ -109,8 +109,8 @@ ASTNode *parse_next_statement(void) {
         [TOKEN_LBRACE] = &&parse_ignore,
         [TOKEN_RBRACE] = &&parse_rbrace,
 
-        [TOKEN_COLON] = &&parse_ignore,
-        [TOKEN_COMMA] = &&parse_ignore,
+        [TOKEN_COLON] = &&parse_colon,
+        [TOKEN_COMMA] = &&parse_comma,
         [TOKEN_PERIOD] = &&parse_period,
         [TOKEN_RETURN] = &&parse_return,
 
@@ -199,7 +199,7 @@ parse_lparen: {
 
 parse_rparen: {
     size_t capacity = 4;
-    ASTNode **args = arena_alloc_transient(&ast_arena, capacity * sizeof(ASTNode));
+    ASTNode **args = arena_alloc_transient(&ast_arena, capacity * sizeof(ASTNode*));
     size_t count = 0;
     bool found_lparen = false;
 
@@ -212,7 +212,7 @@ parse_rparen: {
         }
 
         ASTNode *node = parser_pop(&P);
-        if (node->type == NODE_UNKNOWN && ((MarkerNode*)node)->marker == MARKER_COMMA) continue; // Skip commas
+        if (node->type == NODE_UNKNOWN && ((MarkerNode*)node)->marker == MARKER_COMMA) continue;
 
         if (count >= capacity) {
             size_t old_cap = capacity;
@@ -229,7 +229,7 @@ parse_rparen: {
         exit(EXIT_FAILURE);
     }
 
-    // Reverse array, popping yielded (S_n ... S_1), we need (S_1 ... S_n)
+    // Reverse array: (S_n ... S_1) -> (S_1 ... S_n)
     for (size_t i = 0; i < count / 2; i++) {
         ASTNode *tmp = args[i];
         args[i] = args[count - 1 - i];
@@ -240,26 +240,68 @@ parse_rparen: {
     param_node->param_list.params = args;
     param_node->param_list.count = count;
     param_node->param_list.capacity = capacity;
-    // Check for function declaration: type identifier params
+
+    // Function declaration parameter list: type identifier ( params )
     if (P.stack_top >= 2 &&
         P.stack[P.stack_top - 1]->type == NODE_IDENTIFIER &&
-        P.stack[P.stack_top - 2]->type == NODE_VAR_DECL) {
+        P.stack[P.stack_top - 2]->type == NODE_VAR_DECL &&
+        P.stack[P.stack_top - 2]->var_decl.var_name[0] == '\0') {
+
         parser_push(&P, param_node);
     }
-    // Check for standard function call: function( args )
+    // Standard or RPN function call: identifier ( args )
     else if (P.stack_top >= 1 && P.stack[P.stack_top - 1]->type == NODE_IDENTIFIER) {
         ASTNode *func_id = parser_pop(&P);
+
+        // If no explicit arguments inside (), drain RPN expressions sitting on stack
+        if (param_node->param_list.count == 0) {
+            size_t rpn_cap = 4;
+            size_t rpn_count = 0;
+            ASTNode **rpn_args = arena_alloc_transient(&ast_arena, rpn_cap * sizeof(ASTNode*));
+
+            while (P.stack_top > 0) {
+                ASTNode *top = P.stack[P.stack_top - 1];
+                if (top->type == NODE_UNKNOWN || top->type == NODE_VAR_DECL ||
+                    top->type == NODE_BLOCK || top->type == NODE_FUNC_DECL ||
+                    top->type == NODE_CALL) {
+                    break;
+                }
+                if (rpn_count >= rpn_cap) {
+                    size_t old_c = rpn_cap;
+                    rpn_cap *= 2;
+                    ASTNode **new_r = arena_alloc_transient(&ast_arena, rpn_cap * sizeof(ASTNode*));
+                    memcpy(new_r, rpn_args, old_c * sizeof(ASTNode*));
+                    rpn_args = new_r;
+                }
+                rpn_args[rpn_count++] = parser_pop(&P);
+            }
+
+            if (rpn_count > 0) {
+                for (size_t i = 0; i < rpn_count / 2; i++) {
+                    ASTNode *tmp = rpn_args[i];
+                    rpn_args[i] = rpn_args[rpn_count - 1 - i];
+                    rpn_args[rpn_count - 1 - i] = tmp;
+                }
+                param_node->param_list.params = rpn_args;
+                param_node->param_list.count = rpn_count;
+                param_node->param_list.capacity = rpn_cap;
+            }
+        }
+
         ASTNode *call_node = allocate_node(NODE_CALL, t);
         strncpy(call_node->call_stmt.func_name, func_id->var_decl.var_name, MAX_VAR_LENGTH - 1);
-        call_node->call_stmt.receiver = NULL; // No reciver for standard calls
+        call_node->call_stmt.receiver = NULL;
         call_node->call_stmt.args = param_node;
         parser_push(&P, call_node);
     }
-    // Check for UFCS method call: receiver period method ( args )
-    else if (P.stack_top >= 2 && P.stack[P.stack_top - 1]->type == NODE_IDENTIFIER &&
-            P.stack[P.stack_top - 2]->type == NODE_UNKNOWN && ((MarkerNode*)P.stack[P.stack_top - 2])->marker == MARKER_PERIOD) {
+    // UFCS method call: receiver period method ( args )
+    else if (P.stack_top >= 2 &&
+             P.stack[P.stack_top - 1]->type == NODE_IDENTIFIER &&
+             P.stack[P.stack_top - 2]->type == NODE_UNKNOWN &&
+             ((MarkerNode*)P.stack[P.stack_top - 2])->marker == MARKER_PERIOD) {
+
         ASTNode *method_id = parser_pop(&P);
-        parser_pop(&P); // Pop period
+        parser_pop(&P); // Pop period marker
         ASTNode *receiver = parser_pop(&P);
 
         ASTNode *call_node = allocate_node(NODE_CALL, t);
@@ -268,9 +310,11 @@ parse_rparen: {
         call_node->call_stmt.args = param_node;
         parser_push(&P, call_node);
     }
+    // Standard math expression: ( expr )
     else {
-        // Standard mathmatical grouping parens
-        if (count == 1) parser_push(&P, args[0]);
+        if (count == 1) {
+            parser_push(&P, args[0]);
+        }
     }
 
     t = lexer_next_token();
@@ -280,7 +324,7 @@ parse_rparen: {
 parse_lbracket: {
     parser_push(&P, allocate_marker(MARKER_LBRACKET, t));
     t = lexer_next_token();
-    goto *dispatch[t.type]; // Love that copy-pasting exists
+    goto *dispatch[t.type];
 }
 
 parse_rbracket: {
@@ -402,7 +446,7 @@ parse_term: {
     if (P.stack_top >= 4 &&
         P.stack[P.stack_top - 4]->type == NODE_VAR_DECL &&
         P.stack[P.stack_top - 3]->type == NODE_IDENTIFIER && // Check for if someone writes i64 10 = 20|
-        P.stack[P.stack_top - 2]->type == NODE_UNKNOWN && 
+        P.stack[P.stack_top - 2]->type == NODE_UNKNOWN &&
         ((MarkerNode*)P.stack[P.stack_top - 2])->marker == MARKER_NONE){
         // Find it backwards
         ASTNode *val_node  = parser_pop(&P); // numeric literal, 1
@@ -418,7 +462,7 @@ parse_term: {
     }
     // Conditional Reduction(with if AND else block): `if (condition) [then] else [else]` <- 5 right here
     // fix: requires MARKER_IF at top-5 and MARKER_ELSE at top-2
-    else if (P.stack_top >= 5 && 
+    else if (P.stack_top >= 5 &&
              P.stack[P.stack_top - 5]->type == NODE_UNKNOWN && ((MarkerNode*)P.stack[P.stack_top - 5])->marker == MARKER_IF &&
              P.stack[P.stack_top - 2]->type == NODE_UNKNOWN && ((MarkerNode*)P.stack[P.stack_top - 2])->marker == MARKER_ELSE) {
 
@@ -431,6 +475,7 @@ parse_term: {
         ASTNode *if_node = allocate_node(NODE_IF, t);
         if_node->if_stmt.condition  = condition;
         if_node->if_stmt.then_block = then_blk;
+        if_node->if_stmt.else_block = else_blk;
         if_node->if_stmt.else_block = else_blk;
         parser_push(&P, if_node);
     }

@@ -6,7 +6,7 @@
 // Numbers
 typedef enum {
     TOKEN_EOF,
-    TOKEN_NUMBER_LIT,               // TODO: Add the thing here
+    TOKEN_NUMBER_LIT,               // TODO: Add the thing here : I don't know what I'm supposed to do
     TOKEN_UNKNOWN,
     TOKEN_TYPE,                     // Type keyword, e.g., i64, f32, etc.
     TOKEN_OPERATOR,
@@ -77,6 +77,7 @@ typedef struct {
         uint64_t u64;
         _Float64 f64; // No explicit _Float64 like in C23 and double will sometimes be 32 bits but for here it's fine because I know it's 64 bits on my machine
                         // AHAHAHHAH I HAVE GCC THIS IS AMAZING
+                        // This will use the C17 standard and atleast gcc (GCC) 16.1.1 20260625, not clang 
 
         __int128          i128;
         unsigned __int128 u128;

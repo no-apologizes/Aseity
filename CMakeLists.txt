@@ -12,6 +12,9 @@ add_executable(aseity
         parser.c
         symbol_table.c
         arena.c
+        ir.c
+        ir_gen.c
+        codegen_ir.c
 )
 
 target_compile_options(aseity PRIVATE

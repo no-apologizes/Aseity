@@ -1,16 +1,16 @@
 #pragma once
 #include "ast.h"
 #include <stddef.h>
-// No way I had to learn what hash tables just for this
+// No way I had to learn what hash tables just for this : I already forgot what they are, should've reviewed my code during the camp
 // Linked list of hash tables
 #define MAX_SYMBOL_BUCKETS 64
 
 typedef struct Symbol{
     char name[MAX_VAR_LENGTH];      // 'a'
     char type_name[MAX_VAR_LENGTH]; // 'i64'
-    int line_declared;              // Line ∲
+    int line_declared;              // Line Σ
     struct Symbol *next;            // Pointer for hash collisions (Open chaining)
-    void *llvm_value                // Tracks llvm alloca
+    void *llvm_value;               // Tracks llvm alloca
 } Symbol;
 
 typedef struct Scope {
