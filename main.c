@@ -107,7 +107,7 @@ int main(const int argc, char **argv) {
         semantic_analyze(st, node);
 
         if (node->type == NODE_FUNC_DECL) {
-            const IRFunction *ir_func = ir_gen_function(node);
+            const IRFunction *ir_func = ir_gen_function(st, node);
 
             // If --emit-ir flag is set, print the 3AC IR for origin
             if (dump_ir_only) {

@@ -67,10 +67,15 @@ void symbol_table_pop_scope(SymbolTable *st) {
 
 // Symbol Ops
 bool symbol_table_insert(SymbolTable *st, const char *name, const char *type_name, int line) {
-    // Check for redecl in same scope
-    if (symbol_table_lookup_current(st, name)) {
-        fprintf(stderr, "Semantic Error: Redeclaration of variable '%s' on line %d.\n", name, line);
-        return false;
+    if (!st || !st->current_scope) return false;
+
+    // Check ONLY the current active scope so child blocks can shadow outer variables
+    Symbol *existing = symbol_table_lookup_current(st, name);
+    if (existing) {
+        // Update type and line if re-declared/assigned in the same scope
+        strncpy(existing->type_name, type_name, MAX_VAR_LENGTH - 1);
+        existing->type_name[MAX_VAR_LENGTH - 1] = '\0';
+        return true;
     }
 
     uint32_t idx = hash_symbol(name);

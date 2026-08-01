@@ -5,6 +5,7 @@
 
 typedef enum {
     IR_OP_LOAD_CONST,  // v_dest = 10
+    IR_OP_LOAD_CONST128,
     IR_OP_LOAD_STR,    // v_dest = "string"
     IR_OP_LOAD_VAR,    // v_dest = x
     IR_OP_STORE_VAR,   // x = v_src1
@@ -26,6 +27,7 @@ typedef enum {
     IR_OPERAND_NONE,
     IR_OPERAND_VREG,   // Virtual Register ID
     IR_OPERAND_CONST,  // Literal i64 / char value
+    IR_OPERAND_CONST128,
     IR_OPERAND_STR,    // Pascal string payload
     IR_OPERAND_IDENT,  // Variable/Function string name
     IR_OPERAND_LABEL   // Label index

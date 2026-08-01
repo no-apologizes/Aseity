@@ -3,6 +3,7 @@
 #include <llvm-c/Target.h>
 #include <llvm-c/TargetMachine.h>
 #include <llvm-c/Transforms/PassBuilder.h>
+#include <llvm-c/Types.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,7 @@ static LLVMBuilderRef builder; // The instruction emission cursor (IR Builder) u
 typedef struct {
     char name[MAX_VAR_LENGTH];
     LLVMValueRef alloca_ptr;
+    LLVMTypeRef type;
 } VarAllocMap; // Associative mapping binding an Aseity source variable string identifier(name) to its stack alloca reference(alloca_ptr)
 
 typedef struct {
@@ -31,6 +33,50 @@ void codegen_init(const char *module_name) { // Instantiates the global llvm con
     module = LLVMModuleCreateWithNameInContext(module_name, ctx); // Translation units are units of compilation that represents a single, self-contained source code file after it has processed all macro expansions and header inclusions
                                                                   // https://stackoverflow.com/questions/7146425/llvm-translation-unit#:~:text=So%2C%20translation%20unit%20is%20the%20single%20source%20file%20%28file%2Ec%29%20after%20preprocessing%20%28all%20%23included%20%2A%2Eh%20files%20instantiated%2C%20all%20macro%20are%20expanded%2C%20all%20comments%20are%20skipped%2C%20and%20file%20is%20ready%20for%20tokenizing%29%2E
     builder = LLVMCreateBuilderInContext(ctx);
+}
+
+// Explicitly register runtime C function prototypes with exact ABI types
+static LLVMValueRef get_runtime_function(const char *name) {
+    LLVMValueRef func = LLVMGetNamedFunction(module, name);
+    if (func) return func;
+
+    if (strcmp(name, "aseity_print_i128") == 0) {
+        LLVMTypeRef param_types[] = { LLVMInt128TypeInContext(ctx) };
+        LLVMTypeRef func_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx), param_types, 1, 0);
+        return LLVMAddFunction(module, name, func_type);
+    }
+    if (strcmp(name, "aseity_print_u128") == 0) {
+        LLVMTypeRef param_types[] = { LLVMInt128TypeInContext(ctx) };
+        LLVMTypeRef func_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx), param_types, 1, 0);
+        return LLVMAddFunction(module, name, func_type);
+    }
+    if (strcmp(name, "aseity_print_i64") == 0) {
+        LLVMTypeRef param_types[] = { LLVMInt64TypeInContext(ctx) };
+        LLVMTypeRef func_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx), param_types, 1, 0);
+        return LLVMAddFunction(module, name, func_type);
+    }
+    if (strcmp(name, "aseity_print_bool") == 0) {
+        LLVMTypeRef param_types[] = { LLVMInt8TypeInContext(ctx) };
+        LLVMTypeRef func_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx), param_types, 1, 0);
+        return LLVMAddFunction(module, name, func_type);
+    }
+    if (strcmp(name, "aseity_print_str") == 0) {
+        LLVMTypeRef param_types[] = { LLVMPointerType(LLVMInt8TypeInContext(ctx), 0) };
+        LLVMTypeRef func_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx), param_types, 1, 0);
+        return LLVMAddFunction(module, name, func_type);
+    }
+    if (strcmp(name, "aseity_print_utf8") == 0) {
+        LLVMTypeRef param_types[] = { LLVMInt32TypeInContext(ctx) };
+        LLVMTypeRef func_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx), param_types, 1, 0);
+        return LLVMAddFunction(module, name, func_type);
+    }
+    if (strcmp(name, "aseity_print_f64") == 0) {
+        LLVMTypeRef param_types[] = { LLVMDoubleTypeInContext(ctx) };
+        LLVMTypeRef func_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx), param_types, 1, 0);
+        return LLVMAddFunction(module, name, func_type);
+    }
+
+    return NULL;
 }
 
 void codegen_emit_main_wrapper(void) {
@@ -59,13 +105,40 @@ void codegen_emit_main_wrapper(void) {
     // Convert argc from i32 to i64 for Aseity's origin(argc: i64, ...)
     LLVMValueRef argc_64 = LLVMBuildZExt(builder, argc_32, LLVMInt64TypeInContext(ctx), "argc_i64");
 
-    // Call Aseity's origin(argc_64, argv_ptr)
-    LLVMValueRef args[] = { argc_64, argv_ptr };
-    LLVMValueRef ret_val = LLVMBuildCall2(builder, LLVMGlobalGetValueType(origin_func), origin_func, args, 2, "origin_ret");
+    // Explicitly cast pointer to i64 to prevent LLVM UB
+    LLVMValueRef argv_i64 = LLVMBuildPtrToInt(builder, argv_ptr, LLVMInt64TypeInContext(ctx), "argv_i64");
+
+    size_t origin_param_count = LLVMCountParams(origin_func);
+    LLVMValueRef ret_val;
+    if (origin_param_count >= 2) {
+        LLVMValueRef args[] = { argc_64, argv_i64 };
+        ret_val = LLVMBuildCall2(builder, LLVMGlobalGetValueType(origin_func), origin_func, args, 2, "origin_ret");
+    } else if (origin_param_count == 1) {
+        LLVMValueRef args[] = { argc_64 };
+        ret_val = LLVMBuildCall2(builder, LLVMGlobalGetValueType(origin_func), origin_func, args, 1, "origin_ret");
+    } else {
+        ret_val = LLVMBuildCall2(builder, LLVMGlobalGetValueType(origin_func), origin_func, NULL, 0, "origin_ret");
+    }
 
     // Truncate i64 return value down to i32 for C process exit code
     LLVMValueRef ret_32 = LLVMBuildTrunc(builder, ret_val, LLVMInt32TypeInContext(ctx), "ret_i32");
     LLVMBuildRet(builder, ret_32);
+}
+
+static LLVMValueRef create_entry_block_alloca(LLVMValueRef func, const char *var_name, LLVMTypeRef type) {
+    LLVMBasicBlockRef entry = LLVMGetEntryBasicBlock(func);
+    LLVMBuilderRef tmp_builder = LLVMCreateBuilderInContext(ctx); // <--- Pass ctx
+
+    LLVMValueRef first_instr = LLVMGetFirstInstruction(entry);
+    if (first_instr) {
+        LLVMPositionBuilderBefore(tmp_builder, first_instr);
+    } else {
+        LLVMPositionBuilderAtEnd(tmp_builder, entry);
+    }
+
+    LLVMValueRef alloca_slot = LLVMBuildAlloca(tmp_builder, type, var_name);
+    LLVMDisposeBuilder(tmp_builder);
+    return alloca_slot;
 }
 
 void codegen_lower_function(const IRFunction *ir_func) {
@@ -113,19 +186,22 @@ void codegen_lower_function(const IRFunction *ir_func) {
         } _lbl_target_bb; \
     })
 
-    #define GET_VAR_ALLOCA(var_name) ({ \
-        LLVMValueRef alloca_ref = NULL; \
-        for (size_t k = 0; k < var_count; k++) { \
-            if (strcmp(var_map[k].name, (var_name)) == 0) { alloca_ref = var_map[k].alloca_ptr; break; } \
+    #define GET_VAR_ALLOCA(var_name, llvm_type) ({ \
+    LLVMValueRef _entry_alloca = NULL; \
+    for (size_t k = 0; k < var_count; k++) { \
+        if (strcmp(var_map[k].name, (var_name)) == 0) { \
+            _entry_alloca = var_map[k].alloca_ptr; \
+        break; \
         } \
-        if (!alloca_ref) { \
-            LLVMBasicBlockRef current_bb = LLVMGetInsertBlock(builder); \
-            LLVMPositionBuilder(builder, entry_bb, LLVMGetFirstInstruction(entry_bb)); \
-            alloca_ref = LLVMBuildAlloca(builder, LLVMInt64TypeInContext(ctx), (var_name)); \
-            LLVMPositionBuilderAtEnd(builder, current_bb); \
-            strncpy(var_map[var_count].name, (var_name), MAX_VAR_LENGTH - 1); \
-            var_map[var_count++].alloca_ptr = alloca_ref; \
-        } alloca_ref; \
+    } \
+    if (!_entry_alloca) { \
+        LLVMTypeRef alloc_t = (llvm_type) ? (llvm_type) : LLVMInt64TypeInContext(ctx); \
+        _entry_alloca = create_entry_block_alloca(llvm_func, (var_name), alloc_t); \
+        strncpy(var_map[var_count].name, (var_name), MAX_VAR_LENGTH - 1); \
+        var_map[var_count].type = alloc_t; \
+        var_map[var_count++].alloca_ptr = _entry_alloca; \
+    } \
+    _entry_alloca; \
     })
 
     // Lower instructions
@@ -137,35 +213,76 @@ void codegen_lower_function(const IRFunction *ir_func) {
                 vregs[instr.dest.vreg_id] = LLVMConstInt(LLVMInt64TypeInContext(ctx), instr.src1.const_val, 1);
                 break;
 
+            case IR_OP_LOAD_CONST128: {
+                LLVMTypeRef i128_type = LLVMInt128TypeInContext(ctx);
+                // Directly parse arbitrary 128-bit decimal literal string into LLVM SSA register
+                vregs[instr.dest.vreg_id] = LLVMConstIntOfString(i128_type, instr.src1.str_val, 10);
+                break;
+            }
+
             case IR_OP_LOAD_STR: {
-                // String literal lowering
-                LLVMValueRef str_const = LLVMConstStringInContext(ctx, instr.src1.str_val, strlen(instr.src1.str_val), 1);
+                // Pass 0 as the 4th arg so LLVM automatically appends a '\0' null terminator
+                LLVMValueRef str_const = LLVMConstStringInContext(ctx, instr.src1.str_val, strlen(instr.src1.str_val), 0);
                 LLVMValueRef global_str = LLVMAddGlobal(module, LLVMTypeOf(str_const), ".str");
                 LLVMSetInitializer(global_str, str_const);
                 LLVMSetGlobalConstant(global_str, 1);
-                // Convert to raw pointer for LLVM compatibility
                 LLVMValueRef zero = LLVMConstInt(LLVMInt64TypeInContext(ctx), 0, 0);
                 LLVMValueRef indices[] = { zero, zero };
                 vregs[instr.dest.vreg_id] = LLVMBuildGEP2(builder, LLVMTypeOf(str_const), global_str, indices, 2, "str_ptr");
                 break;
             }
 
-            case IR_OP_LOAD_VAR:
-                vregs[instr.dest.vreg_id] = LLVMBuildLoad2(builder, LLVMInt64TypeInContext(ctx), GET_VAR_ALLOCA(instr.src1.name), "load_tmp");
-                break;
+            case IR_OP_STORE_VAR: {
+                LLVMValueRef val = vregs[instr.src1.vreg_id];
+                LLVMTypeRef val_type = LLVMTypeOf(val);
+                LLVMValueRef alloca_ref = GET_VAR_ALLOCA(instr.dest.name, val_type);
 
-            case IR_OP_STORE_VAR:
-                LLVMBuildStore(builder, vregs[instr.src1.vreg_id], GET_VAR_ALLOCA(instr.dest.name));
+                LLVMTypeRef alloca_type = LLVMGetAllocatedType(alloca_ref);
+                if (alloca_type != val_type) {
+                    if (LLVMGetTypeKind(alloca_type) == LLVMIntegerTypeKind && LLVMGetTypeKind(val_type) == LLVMIntegerTypeKind) {
+                        if (LLVMGetIntTypeWidth(alloca_type) > LLVMGetIntTypeWidth(val_type)) {
+                            val = LLVMBuildZExt(builder, val, alloca_type, "zext_val");
+                        } else if (LLVMGetIntTypeWidth(alloca_type) < LLVMGetIntTypeWidth(val_type)) {
+                            val = LLVMBuildTrunc(builder, val, alloca_type, "trunc_val");
+                        }
+                    }
+                }
+                LLVMBuildStore(builder, val, alloca_ref);
                 break;
+            }
 
+            case IR_OP_LOAD_VAR: {
+                LLVMTypeRef var_type = LLVMInt64TypeInContext(ctx);
+                for (size_t k = 0; k < var_count; k++) {
+                    if (strcmp(var_map[k].name, instr.src1.name) == 0) {
+                        var_type = var_map[k].type;
+                        break;
+                    }
+                }
+                LLVMValueRef alloca_ref = GET_VAR_ALLOCA(instr.src1.name, var_type);
+                vregs[instr.dest.vreg_id] = LLVMBuildLoad2(builder, var_type, alloca_ref, "load_tmp");
+                break;
+            }
+
+                /*
             case IR_OP_ADD:
                 vregs[instr.dest.vreg_id] = LLVMBuildAdd(builder, vregs[instr.src1.vreg_id], vregs[instr.src2.vreg_id], "add_tmp");
                 break;
+                */
 
             case IR_OP_CMP_LT: {
-                // LLVM CMP returns i1
-                // We must extend it to i64 to match Aseity's vregs
-                LLVMValueRef cmp = LLVMBuildICmp(builder, LLVMIntSLT, vregs[instr.src1.vreg_id], vregs[instr.src2.vreg_id], "cmp_tmp");
+                LLVMValueRef lhs = vregs[instr.src1.vreg_id];
+                LLVMValueRef rhs = vregs[instr.src2.vreg_id];
+                LLVMTypeRef ltype = LLVMTypeOf(lhs);
+                LLVMTypeRef rtype = LLVMTypeOf(rhs);
+                if (ltype != rtype) {
+                    if (LLVMGetIntTypeWidth(ltype) > LLVMGetIntTypeWidth(rtype)) {
+                        rhs = LLVMBuildZExt(builder, rhs, ltype, "zext_rhs");
+                    } else {
+                        lhs = LLVMBuildZExt(builder, lhs, rtype, "zext_lhs");
+                    }
+                }
+                LLVMValueRef cmp = LLVMBuildICmp(builder, LLVMIntSLT, lhs, rhs, "cmp_tmp");
                 vregs[instr.dest.vreg_id] = LLVMBuildZExt(builder, cmp, LLVMInt64TypeInContext(ctx), "cmp_ext");
                 break;
             }
@@ -208,10 +325,64 @@ void codegen_lower_function(const IRFunction *ir_func) {
                 break;
 
             case IR_OP_CALL: {
+                LLVMValueRef target_func = get_runtime_function(instr.src1.name);
+                if (!target_func) {
+                    target_func = LLVMGetNamedFunction(module, instr.src1.name);
+                }
+                if (!target_func) {
+                    LLVMTypeRef *param_types = malloc(arg_count * sizeof(LLVMTypeRef));
+                    for (size_t k = 0; k < arg_count; k++) {
+                        param_types[k] = LLVMInt64TypeInContext(ctx);
+                    }
+                    LLVMTypeRef func_type = LLVMFunctionType(LLVMInt64TypeInContext(ctx), param_types, arg_count, 0);
+                    target_func = LLVMAddFunction(module, instr.src1.name, func_type);
+                    free(param_types);
+                }
+                LLVMTypeRef target_type = LLVMGlobalGetValueType(target_func);
+
+                size_t expected = LLVMCountParams(target_func);
+                LLVMValueRef safe_args[16];
+                size_t safe_count = 0;
+
+                for (size_t k = 0; k < expected; k++) {
+                    LLVMValueRef arg_val = (k < arg_count) ? call_args[k] : LLVMConstInt(LLVMInt64TypeInContext(ctx), 0, 0);
+                    LLVMTypeRef param_t = LLVMTypeOf(LLVMGetParam(target_func, k));
+                    LLVMTypeRef arg_t = LLVMTypeOf(arg_val);
+
+                    // Zero-extend arguments if call parameter width exceeds passed SSA register width
+                    if (param_t != arg_t) {
+                        if (LLVMGetTypeKind(param_t) == LLVMIntegerTypeKind && LLVMGetTypeKind(arg_t) == LLVMIntegerTypeKind) {
+                            if (LLVMGetIntTypeWidth(param_t) > LLVMGetIntTypeWidth(arg_t)) {
+                                arg_val = LLVMBuildZExt(builder, arg_val, param_t, "zext_arg");
+                            } else if (LLVMGetIntTypeWidth(param_t) < LLVMGetIntTypeWidth(arg_t)) {
+                                arg_val = LLVMBuildTrunc(builder, arg_val, param_t, "trunc_arg");
+                            }
+                        }
+                    }
+                    safe_args[safe_count++] = arg_val;
+                }
+
+                if (LLVMIsFunctionVarArg(target_type)) {
+                    for (size_t k = expected; k < arg_count; k++) {
+                        safe_args[safe_count++] = call_args[k];
+                    }
+                }
+
+                //Ensure functions returning void omit the SSA identifier
+                const char *call_name = (LLVMGetTypeKind(LLVMGetReturnType(target_type)) == LLVMVoidTypeKind) ? "" : "call_tmp";
+
+                vregs[instr.dest.vreg_id] = LLVMBuildCall2(builder, target_type, target_func, safe_args, safe_count, call_name);
+                arg_count = 0;
+                break;
+            }
+
+            /*
+            case IR_OP_CALL: {
                 // Intrinsic override: map 'print' to C's 'printf'
                 // This will prob be the only hardcoded function unlike where C needs the std lib
                 // I will prob write my own print specifcally for this too
                 // This can only print i64
+                / *
                 if (strcmp(instr.src1.name, "print") == 0) {
                     LLVMValueRef printf_func = LLVMGetNamedFunction(module, "printf");
                     if (!printf_func) {
@@ -230,6 +401,21 @@ void codegen_lower_function(const IRFunction *ir_func) {
                     arg_count = 0;
                     break;
                 }
+                */ /*
+
+                if (strcmp(instr.src1.name, "print") == 0) {
+                    LLVMValueRef print_func = LLVMGetNamedFunction(module, "aseity_print_i128");
+                    if (!print_func) {
+                        LLVMTypeRef print_args[] = { LLVMInt64TypeInContext(ctx) };
+                        LLVMTypeRef print_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx), print_args, 1, 0);
+                        print_func = LLVMAddFunction(module, "aseity_print_i128", print_type);
+                    }
+
+                     LLVMValueRef print_args_vals[] = { call_args[0] };
+                     vregs[instr.dest.vreg_id] = LLVMBuildCall2(builder, LLVMGlobalGetValueType(print_func), print_func, print_args_vals, 1, "");
+                     arg_count = 0;
+                     break;
+                 }
 
                 LLVMValueRef target_func = LLVMGetNamedFunction(module, instr.src1.name);
                 if (!target_func) {
@@ -260,10 +446,75 @@ void codegen_lower_function(const IRFunction *ir_func) {
                 arg_count = 0;
                 break;
             }
+            */
 
             case IR_OP_RET:
                 LLVMBuildRet(builder, vregs[instr.src1.vreg_id]);
                 break;
+
+            case IR_OP_ADD: {
+                LLVMValueRef lhs = vregs[instr.src1.vreg_id];
+                LLVMValueRef rhs = vregs[instr.src2.vreg_id];
+                LLVMTypeRef ltype = LLVMTypeOf(lhs);
+                LLVMTypeRef rtype = LLVMTypeOf(rhs);
+                if (ltype != rtype) {
+                    if (LLVMGetIntTypeWidth(ltype) > LLVMGetIntTypeWidth(rtype)) {
+                        rhs = LLVMBuildZExt(builder, rhs, ltype, "zext_rhs");
+                    } else {
+                        lhs = LLVMBuildZExt(builder, lhs, rtype, "zext_lhs");
+                    }
+                }
+                vregs[instr.dest.vreg_id] = LLVMBuildAdd(builder, lhs, rhs, "add_tmp");
+                break;
+            }
+
+            case IR_OP_SUB: {
+                LLVMValueRef lhs = vregs[instr.src1.vreg_id];
+                LLVMValueRef rhs = vregs[instr.src2.vreg_id];
+                LLVMTypeRef ltype = LLVMTypeOf(lhs);
+                LLVMTypeRef rtype = LLVMTypeOf(rhs);
+                if (ltype != rtype) {
+                    if (LLVMGetIntTypeWidth(ltype) > LLVMGetIntTypeWidth(rtype)) {
+                        rhs = LLVMBuildZExt(builder, rhs, ltype, "zext_rhs");
+                    } else {
+                        lhs = LLVMBuildZExt(builder, lhs, rtype, "zext_lhs");
+                    }
+                }
+                vregs[instr.dest.vreg_id] = LLVMBuildSub(builder, lhs, rhs, "sub_tmp");
+                break;
+            }
+
+            case IR_OP_MUL: {
+                LLVMValueRef lhs = vregs[instr.src1.vreg_id];
+                LLVMValueRef rhs = vregs[instr.src2.vreg_id];
+                LLVMTypeRef ltype = LLVMTypeOf(lhs);
+                LLVMTypeRef rtype = LLVMTypeOf(rhs);
+                if (ltype != rtype) {
+                    if (LLVMGetIntTypeWidth(ltype) > LLVMGetIntTypeWidth(rtype)) {
+                        rhs = LLVMBuildZExt(builder, rhs, ltype, "zext_rhs");
+                    } else {
+                        lhs = LLVMBuildZExt(builder, lhs, rtype, "zext_lhs");
+                    }
+                }
+                vregs[instr.dest.vreg_id] = LLVMBuildMul(builder, lhs, rhs, "mul_tmp");
+                break;
+            }
+
+            case IR_OP_DIV: {
+                LLVMValueRef lhs = vregs[instr.src1.vreg_id];
+                LLVMValueRef rhs = vregs[instr.src2.vreg_id];
+                LLVMTypeRef ltype = LLVMTypeOf(lhs);
+                LLVMTypeRef rtype = LLVMTypeOf(rhs);
+                if (ltype != rtype) {
+                    if (LLVMGetIntTypeWidth(ltype) > LLVMGetIntTypeWidth(rtype)) {
+                        rhs = LLVMBuildZExt(builder, rhs, ltype, "zext_rhs");
+                    } else {
+                        lhs = LLVMBuildZExt(builder, lhs, rtype, "zext_lhs");
+                    }
+                }
+                vregs[instr.dest.vreg_id] = LLVMBuildSDiv(builder, lhs, rhs, "div_tmp");
+                break;
+            }
 
             default: break;
         }
@@ -340,7 +591,7 @@ void codegen_emit_object_and_link(const char *output_filename) {
 
         // Invoke the system linker to create the final executable
         char link_cmd[512];
-        snprintf(link_cmd, sizeof(link_cmd), "cc %s -o %s -lm", obj_filename, output_filename);
+        snprintf(link_cmd, sizeof(link_cmd), "cc %s runtime/aseity_rt.c -o %s -lm", obj_filename, output_filename);
 
         int link_res = system(link_cmd);
         if (link_res == 0) {

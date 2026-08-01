@@ -1,0 +1,29 @@
+i128 calc_fib(fib_num: u8) [
+    i128 t1 = 0|
+    i128 t2 = 1|
+    i128 next_term = 0|
+    u8 i = 0|
+    u8 iterations = fib_num 1 - |
+    as (i iterations <) [
+        u8 i = i 1 +|
+        i128 next_term = t1 t2 +|
+        i128 t1 = t2|
+        i128 t2 = next_term|
+    ]|
+    next_term return|
+]|
+
+i64 origin(argc: i64, argv: str{}) [
+    i128 one_fib_num = calc_fib(184)|
+    print("184th Fibonacci Number")|
+    print(one_fib_num)|
+    0 return
+]
+
+./ This actually returns the 184th fib number but truncated to i64 because functions are hardcoded to return an i64. \.
+./
+[apologizes@save-the-cat Aseity]$ aseity calc_fib.ase
+184th Fibonacci Number
+10993266775918486379
+[apologizes@save-the-cat Aseity]$
+\.

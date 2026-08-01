@@ -1,0 +1,23 @@
+i64 origin(argc: i64, argv: str{}) [
+    u128 t1 = 0|
+    u128 t2 = 1|
+    u128 next_term = 0|
+    i64 i = 0|
+    u8 iterations = 185|
+    as (i iterations <) [
+        i64 i = i 1 +|
+        u128 next_term = t1 t2 +|
+        u128 t1 = t2|
+        u128 t2 = next_term|
+    ]|
+    print("186th Fibonacci Number:")
+    print(next_term)|
+    0 return| ./ Unnecessary but for show here \.
+]|
+
+./
+[apologizes@save-the-cat Aseity]$ aseity u128_fib.ase
+186th Fibonacci Number:
+332825110087067562321196029789634457848
+[apologizes@save-the-cat Aseity]$
+\.

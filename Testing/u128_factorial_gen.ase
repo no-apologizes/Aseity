@@ -1,0 +1,21 @@
+i64 origin(argc: i64, argv: str{}) [
+    u128 fact = 1|
+    u128 i = 1|
+    u8 max = 34|
+
+    as (i max <) [
+        u128 i = i 1 +|
+        u128 fact = fact i *|
+    ]|
+
+    print("Factorial of 34:")|
+    print(fact)|
+    0 return|
+]|
+
+./
+[apologizes@save-the-cat Aseity]$ aseity u128_factorial_gen.ase
+Factorial of 34:
+295232799039604140847618609643520000000
+[apologizes@save-the-cat Aseity]$
+\.

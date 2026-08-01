@@ -15,6 +15,7 @@ add_executable(aseity
         ir.c
         ir_gen.c
         codegen_ir.c
+        runtime/aseity_rt.c
 )
 
 target_compile_options(aseity PRIVATE

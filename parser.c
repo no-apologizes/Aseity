@@ -476,7 +476,6 @@ parse_term: {
         if_node->if_stmt.condition  = condition;
         if_node->if_stmt.then_block = then_blk;
         if_node->if_stmt.else_block = else_blk;
-        if_node->if_stmt.else_block = else_blk;
         parser_push(&P, if_node);
     }
     // Conditional Reduction(ONLY with if block)

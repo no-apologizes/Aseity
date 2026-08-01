@@ -39,6 +39,7 @@ static void print_operand(IROperand op) {
         case IR_OPERAND_NONE:  break;
         case IR_OPERAND_VREG:  printf("v%u", op.vreg_id); break;
         case IR_OPERAND_CONST: printf("%ld", op.const_val); break;
+        case IR_OPERAND_CONST128: printf("%s_i128", op.str_val); break;
         case IR_OPERAND_STR:   printf("\"%s\"", op.str_val); break;
         case IR_OPERAND_IDENT: printf("%s", op.name); break;
         case IR_OPERAND_LABEL: printf(".L%u", op.label_id); break;
@@ -60,6 +61,8 @@ void ir_print_function(const IRFunction *func) {
         switch (instr.op) {
             case IR_OP_LOAD_CONST:
                 print_operand(instr.dest); printf(" = LOAD_CONST "); print_operand(instr.src1); break;
+            case IR_OP_LOAD_CONST128:
+                print_operand(instr.dest); printf(" = LOAD_CONST128 "); print_operand(instr.src1);
             case IR_OP_LOAD_STR:
                 print_operand(instr.dest); printf(" = LOAD_STR "); print_operand(instr.src1); break;
             case IR_OP_LOAD_VAR:
