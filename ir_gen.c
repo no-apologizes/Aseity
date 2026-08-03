@@ -301,7 +301,7 @@ IROperand ir_gen_expr(SymbolTable *st, IRFunction *func, ASTNode *node) {
             ir_emit(func, IR_OP_LOAD_VAR, instance_ptr, ident_op, (IROperand){.type = IR_OPERAND_NONE});
 
             // Load the structural byte offset constant into a vreg
-            IROperand offset_const = ir_make_const(offset);
+            IROperand offset_const = ir_make_const((int64_t)offset);
             IROperand offset_vreg = ir_make_vreg(func);
             ir_emit(func, IR_OP_LOAD_CONST, offset_vreg, offset_const, (IROperand){.type = IR_OPERAND_NONE});
 
@@ -350,7 +350,7 @@ void ir_gen_stmt(SymbolTable *st, IRFunction *func, ASTNode *node) {
                 StructDef *sdef = st->struct_registry;
                 while (sdef) {
                     if (strcmp(sdef->name, node->var_decl.type_name) == 0) {
-                        IROperand size_op = ir_make_const(sdef->total_size);
+                        IROperand size_op = ir_make_const((int64_t)sdef->total_size);
                         IROperand var_op = ir_make_ident(node->var_decl.var_name);
                         IROperand dest_vreg = ir_make_vreg(func);
 

@@ -176,7 +176,7 @@ void codegen_lower_function(const IRFunction *ir_func) {
             param_types[i] = LLVMInt64TypeInContext(ctx);
         }
 
-        LLVMTypeRef func_type = LLVMFunctionType(ret_type, param_types, ir_func->param_count, 0);
+        LLVMTypeRef func_type = LLVMFunctionType(ret_type, param_types, (unsigned int)ir_func->param_count, 0);
         llvm_func = LLVMAddFunction(module, ir_func->func_name, func_type);
         free(param_types);
     }
@@ -255,7 +255,7 @@ void codegen_lower_function(const IRFunction *ir_func) {
 
         switch (instr.op) {
             case IR_OP_LOAD_CONST:
-                vregs[instr.dest.vreg_id] = LLVMConstInt(LLVMInt64TypeInContext(ctx), instr.src1.const_val, 1);
+                vregs[instr.dest.vreg_id] = LLVMConstInt(LLVMInt64TypeInContext(ctx), (unsigned long long)instr.src1.const_val, 1);
                 break;
 
             case IR_OP_LOAD_CONST128: {
@@ -267,7 +267,7 @@ void codegen_lower_function(const IRFunction *ir_func) {
 
             case IR_OP_LOAD_STR: {
                 // Pass 0 as the 4th arg so LLVM automatically appends a '\0' null terminator
-                LLVMValueRef str_const = LLVMConstStringInContext(ctx, instr.src1.str_val, strlen(instr.src1.str_val), 0);
+                LLVMValueRef str_const = LLVMConstStringInContext(ctx, instr.src1.str_val, (unsigned int)strlen(instr.src1.str_val), 0);
                 LLVMValueRef global_str = LLVMAddGlobal(module, LLVMTypeOf(str_const), ".str");
                 LLVMSetInitializer(global_str, str_const);
                 LLVMSetGlobalConstant(global_str, 1);
@@ -366,7 +366,7 @@ void codegen_lower_function(const IRFunction *ir_func) {
 
             case IR_OP_LOAD_PARAM:
                 // Pulls the native parameter from the LLVM function
-                vregs[instr.dest.vreg_id] = LLVMGetParam(llvm_func, instr.src1.const_val);
+                vregs[instr.dest.vreg_id] = LLVMGetParam(llvm_func, (unsigned int)instr.src1.const_val);
                 break;
 
             case IR_OP_CALL: {
@@ -379,7 +379,7 @@ void codegen_lower_function(const IRFunction *ir_func) {
                     for (size_t k = 0; k < arg_count; k++) {
                         param_types[k] = LLVMInt64TypeInContext(ctx);
                     }
-                    LLVMTypeRef func_type = LLVMFunctionType(LLVMInt64TypeInContext(ctx), param_types, arg_count, 0);
+                    LLVMTypeRef func_type = LLVMFunctionType(LLVMInt64TypeInContext(ctx), param_types, (unsigned int)arg_count, 0);
                     target_func = LLVMAddFunction(module, instr.src1.name, func_type);
                     free(param_types);
                 }
@@ -391,7 +391,7 @@ void codegen_lower_function(const IRFunction *ir_func) {
 
                 for (size_t k = 0; k < expected; k++) {
                     LLVMValueRef arg_val = (k < arg_count) ? call_args[k] : LLVMConstInt(LLVMInt64TypeInContext(ctx), 0, 0);
-                    LLVMTypeRef param_t = LLVMTypeOf(LLVMGetParam(target_func, k));
+                    LLVMTypeRef param_t = LLVMTypeOf(LLVMGetParam(target_func, (unsigned int)k));
                     LLVMTypeRef arg_t = LLVMTypeOf(arg_val);
 
                     // Zero-extend arguments if call parameter width exceeds passed SSA register width
@@ -416,7 +416,7 @@ void codegen_lower_function(const IRFunction *ir_func) {
                 //Ensure functions returning void omit the SSA identifier
                 const char *call_name = (LLVMGetTypeKind(LLVMGetReturnType(target_type)) == LLVMVoidTypeKind) ? "" : "call_tmp";
 
-                vregs[instr.dest.vreg_id] = LLVMBuildCall2(builder, target_type, target_func, safe_args, safe_count, call_name);
+                vregs[instr.dest.vreg_id] = LLVMBuildCall2(builder, target_type, target_func, safe_args, (unsigned int)safe_count, call_name);
                 arg_count = 0;
                 break;
             }
@@ -453,7 +453,7 @@ void codegen_lower_function(const IRFunction *ir_func) {
                 LLVMValueRef ptr_val = LLVMBuildIntToPtr(builder, ptr_i64, LLVMPointerType(LLVMInt8TypeInContext(ctx), 0), "jmp_ptr");
 
                 // Wire all potential destinations globally into the instruction
-                LLVMValueRef indirect_br = LLVMBuildIndirectBr(builder, ptr_val, user_label_count);
+                LLVMValueRef indirect_br = LLVMBuildIndirectBr(builder, ptr_val, (unsigned int)user_label_count);
                 for (size_t k = 0; k < user_label_count; k++) {
                     LLVMAddDestination(indirect_br, user_label_map[k].block_ref);
                 }
@@ -495,7 +495,7 @@ void codegen_lower_function(const IRFunction *ir_func) {
 
             case IR_OP_ALLOCA: {
                 // Allocate a contiguous byte array on the stack matching the struct's total size
-                LLVMTypeRef arr_type = LLVMArrayType(LLVMInt8TypeInContext(ctx), instr.src1.const_val);
+                LLVMTypeRef arr_type = LLVMArrayType(LLVMInt8TypeInContext(ctx), (unsigned int)instr.src1.const_val);
 
                 // Position builder in the entry block for mem2reg compatibility
                 LLVMBuilderRef tmp_builder = LLVMCreateBuilderInContext(ctx);
