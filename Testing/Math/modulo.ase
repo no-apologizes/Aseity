@@ -1,0 +1,28 @@
+i64 fizzbuzz(n: i64) [
+    i64 i = 1|
+
+    as (i n <=) [
+        if (i 15 % 0 ==) [
+            print("FizzBuzz")|
+        ] else [
+            if (i 3 % 0 ==) [
+                print("Fizz")|
+            ] else [
+                if (i 5 % 0 ==) [
+                    print("Buzz")|
+                ] else [
+                    print(i)|
+                ]|
+            ]|
+        ]|
+
+        i = i 1 +|
+    ]|
+
+    0 return|
+]|
+
+i64 origin(argc: i64, argv: str{}) [
+    fizzbuzz(30)|
+    0 return|
+]|

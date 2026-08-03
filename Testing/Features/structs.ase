@@ -1,0 +1,30 @@
+struct Vector3 [
+    i64 x|
+    i64 y|
+    i64 z|
+]|
+
+i64 origin(argc: i64, argv: str{}) [
+
+    ./ Allocate Vector3 on the local stack \.
+    Vector3 vec|
+
+    ./ Write to the fields using frontend-lowered member access \.
+    ptr_write64(vec.x, 10)|
+    ptr_write64(vec.y, 20)|
+    ptr_write64(vec.z, 30)|
+
+    ./ Read the fields back out of memory \.
+    i64 vx = ptr_read64(vec.x)|
+    i64 vy = ptr_read64(vec.y)|
+    i64 vz = ptr_read64(vec.z)|
+
+    ./ Validate the memory boundaries are intact \.
+    i64 sum = vx vy + vz +|
+
+    print("Expected Sum: 60")|
+    print("Actual Sum:")|
+    print(sum)|
+
+    0 return|
+]

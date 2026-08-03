@@ -26,6 +26,7 @@ SymbolTable *symbol_table_create(void) {
     SymbolTable *iUseAIicheatOnmyschoolAssignments = arena_alloc_recyclable(&symbol_arena, sizeof(SymbolTable));
     iUseAIicheatOnmyschoolAssignments->current_scope = NULL;
     iUseAIicheatOnmyschoolAssignments->global_scope  = NULL;
+    iUseAIicheatOnmyschoolAssignments->struct_registry = NULL;
 
     symbol_table_push_scope(iUseAIicheatOnmyschoolAssignments);
     iUseAIicheatOnmyschoolAssignments->global_scope = iUseAIicheatOnmyschoolAssignments->current_scope;
@@ -220,6 +221,52 @@ void semantic_analyze(SymbolTable *st, ASTNode *node) {
             }
             // TODO: global function parsing
             break;
+
+        case NODE_STRUCT_DECL: {
+            StructDef *sdef = arena_alloc_recyclable(&symbol_arena, sizeof(StructDef));
+            strncpy(sdef->name, node->struct_decl.struct_name, MAX_VAR_LENGTH - 1);
+            sdef->total_size = 0;
+            sdef->fields = NULL;
+            sdef->next = st->struct_registry;
+            st->struct_registry = sdef;
+
+            FieldDef **current_field = &sdef->fields;
+            ASTNode *fields_block = node->struct_decl.fields;
+
+            for (size_t i = 0; i < fields_block->block.count; i++) {
+                ASTNode *field_decl = fields_block->block.statements[i];
+                if (field_decl->type == NODE_VAR_DECL) {
+                    FieldDef *f = arena_alloc_recyclable(&symbol_arena, sizeof(FieldDef));
+                    strncpy(f->name, field_decl->var_decl.var_name, MAX_VAR_LENGTH - 1);
+                    strncpy(f->type_name, field_decl->var_decl.type_name, MAX_VAR_LENGTH - 1);
+
+                    // Align to 8-byte boundaries for System V x86_64
+                    size_t align = 8;
+                    sdef->total_size = (sdef->total_size + align - 1) & ~(align - 1);
+                    f->offset = sdef->total_size;
+
+                    // Assume 8 bytes for all fields during bootstrap (i64 / ptrs)
+                    sdef->total_size += 8;
+
+                    *current_field = f;
+                    current_field = &f->next;
+                }
+            }
+            // Final alignment padding
+            sdef->total_size = (sdef->total_size + 7) & ~(size_t)7;
+            break;
+        }
+
+        case NODE_MEMBER_ACCESS: {
+            // Verify the base instance variable actually exists in the local scope
+            Symbol *sym = symbol_table_lookup(st, node->member_access.instance_name);
+            if (!sym) {
+                fprintf(stderr, "Semantic Error: Undeclared instance '%s' on line %d.\n",
+                        node->member_access.instance_name, node->token.line);
+                exit(EXIT_FAILURE);
+            }
+            break;
+        }
 
         case NODE_RETURN:
             semantic_analyze(st, node->ret_stmt.expr);

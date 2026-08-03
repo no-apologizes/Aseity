@@ -19,8 +19,14 @@ typedef enum {
     NODE_BLOCK,        // Code enclosed in brackets [ ... ]
     NODE_IF,           // Conditionals
     NODE_AS_LOOP,      // Loops
-    NODE_CALL,         // Function/method calls like [1, 2].add()|, UFCS
     NODE_RETURN,       // Return
+    NODE_CALL,         // Function/method calls like [1, 2].add()|, UFCS
+    NODE_USER_LABEL,   // $LABEL_NAME
+    NODE_LABEL_ADDR,   // Address of the label, defined at runtime I think
+    NODE_INDIRECT_JMP, // Jmp
+    NODE_STRUCT_DECL,
+    NODE_MEMBER_ACCESS,
+    NODE_IMPORT,
     NODE_UNKNOWN       // Sentinels/internal markers
 } ASTNodeType;
 
@@ -89,6 +95,28 @@ struct ASTNode {
             ASTNode *receiver; // LeftHandSide as [1, 2] in [1, 2].add()
             ASTNode *args;     // Arguements passed inside ()
         } call_stmt;
+
+        struct {
+            char label_name[MAX_VAR_LENGTH];
+        } user_label;
+
+        struct {
+            ASTNode *ptr_expr;
+        } indirect_jmp;
+
+        struct {
+            char struct_name[MAX_VAR_LENGTH];
+            ASTNode *fields; // Block of NODE_VAR_DECLs
+        } struct_decl;
+
+        struct {
+            char instance_name[MAX_VAR_LENGTH];
+            char field_name[MAX_VAR_LENGTH];
+        } member_access;
+
+        struct {
+            char filename[MAX_VAR_LENGTH];
+        } import_stmt;
 
         // Return expressions
         struct {

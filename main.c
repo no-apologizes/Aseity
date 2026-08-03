@@ -11,6 +11,33 @@
 #include <string.h>
 #include <stdbool.h>
 
+#define MAX_VISITED_FILES 128
+static uint32_t visited_hashes[MAX_VISITED_FILES];
+static size_t visited_count = 0;
+
+static uint32_t hash_filename(const char *str) {
+    uint32_t hash = 2166136261u;
+    while (*str) {
+        hash ^= (unsigned char)*str++;
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+static bool is_file_visited(const char *filename) {
+    uint32_t hash = hash_filename(filename);
+    for (size_t i = 0; i < visited_count; i++) {
+        if (visited_hashes[i] == hash) return true;
+    }
+    return false;
+}
+
+static void mark_file_visited(const char *filename) {
+    if (visited_count < MAX_VISITED_FILES) {
+        visited_hashes[visited_count++] = hash_filename(filename);
+    }
+}
+
 static char* read_file_contents(const char *path) {
     // Open in binary mode ("rb") to get exact byte counts across platforms
     FILE *file = fopen(path, "rb");
@@ -20,7 +47,13 @@ static char* read_file_contents(const char *path) {
     }
 
     fseek(file, 0L, SEEK_END);
-    const size_t file_size = ftell(file);
+    long raw_size = ftell(file);
+    if (raw_size < 0) {
+        fprintf(stderr, "Aseity Driver Error: Failed to determine file size for '%s'\n", path);
+        fclose(file);
+        exit(EXIT_FAILURE);
+    }
+    const size_t file_size = (size_t)raw_size;
     rewind(file);
 
     // Allocate directly from transient ast_arena
@@ -103,18 +136,33 @@ int main(const int argc, char **argv) {
 
     ASTNode *node = NULL; // Frontend: Lex -> Parse -> Semantics -> 3AC IR
 
-    while ((node = parse_next_statement()) != NULL) {
+    while (1) {
+        node = parse_next_statement();
+
+        // If we hit EOF, attempt to pop back to a parent file
+        if (!node) {
+            if (lexer_pop_source()) continue;
+            break; // True EOF across all files
+        }
+
+        // Intercept imports before they hit Semantic Analysis or IR Gen
+        if (node->type == NODE_IMPORT) {
+            if (is_file_visited(node->import_stmt.filename)) {
+                continue; // O(1) guard rejects duplicate
+            }
+            mark_file_visited(node->import_stmt.filename);
+
+            const char *new_code = read_file_contents(node->import_stmt.filename);
+            lexer_push_source(new_code); // Redirect lexer
+            continue;
+        }
+
         semantic_analyze(st, node);
 
         if (node->type == NODE_FUNC_DECL) {
             const IRFunction *ir_func = ir_gen_function(st, node);
-
-            // If --emit-ir flag is set, print the 3AC IR for origin
-            if (dump_ir_only) {
-                ir_print_function(ir_func);
-            } else {
-                codegen_lower_function(ir_func);
-            }
+            if (dump_ir_only) ir_print_function(ir_func);
+            else codegen_lower_function(ir_func);
         }
     }
 

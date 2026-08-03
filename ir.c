@@ -59,10 +59,20 @@ void ir_print_function(const IRFunction *func) {
         printf("%03zu:  ", i);
 
         switch (instr.op) {
+            case IR_OP_ALLOCA:
+                print_operand(instr.dest); printf(" = ALLOCA "); print_operand(instr.src1); break;
+            case IR_OP_PTR_READ64:
+                print_operand(instr.dest); printf(" = PTR_READ64 "); print_operand(instr.src1); break;
+            case IR_OP_PTR_WRITE64:
+                printf("PTR_WRITE64 "); print_operand(instr.src1); printf(", "); print_operand(instr.src2); break;
+            case IR_OP_PTR_READ8:
+                print_operand(instr.dest); printf(" = PTR_READ8 "); print_operand(instr.src1); break;
+            case IR_OP_PTR_WRITE8:
+                printf("PTR_WRITE8 "); print_operand(instr.src1); printf(", "); print_operand(instr.src2); break;
             case IR_OP_LOAD_CONST:
                 print_operand(instr.dest); printf(" = LOAD_CONST "); print_operand(instr.src1); break;
             case IR_OP_LOAD_CONST128:
-                print_operand(instr.dest); printf(" = LOAD_CONST128 "); print_operand(instr.src1);
+                print_operand(instr.dest); printf(" = LOAD_CONST128 "); print_operand(instr.src1); break;
             case IR_OP_LOAD_STR:
                 print_operand(instr.dest); printf(" = LOAD_STR "); print_operand(instr.src1); break;
             case IR_OP_LOAD_VAR:
@@ -75,6 +85,8 @@ void ir_print_function(const IRFunction *func) {
                 print_operand(instr.dest); printf(" = SUB "); print_operand(instr.src1); printf(", "); print_operand(instr.src2); break;
             case IR_OP_MUL:
                 print_operand(instr.dest); printf(" = MUL "); print_operand(instr.src1); printf(", "); print_operand(instr.src2); break;
+            case IR_OP_MOD:
+                print_operand(instr.dest); printf(" = MOD "); print_operand(instr.src1); printf(", "); print_operand(instr.src2); break;
             case IR_OP_DIV:
                 print_operand(instr.dest); printf(" = DIV "); print_operand(instr.src1); printf(", "); print_operand(instr.src2); break;
             case IR_OP_CMP_LT:

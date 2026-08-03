@@ -13,14 +13,28 @@ typedef enum {
     IR_OP_SUB,
     IR_OP_MUL,
     IR_OP_DIV,
+    IR_OP_MOD,
     IR_OP_CMP_LT,      // v_dest = v_src1 < v_src2
+    IR_OP_CMP_LE,      // v_dest = v_src1 <= v_src2
+    IR_OP_CMP_GT,      // v_dest = v_src1 > v_src2
+    IR_OP_CMP_GE,      // v_dest = v_src1 >= v_src2
+    IR_OP_CMP_EQ,      // v_dest = v_src1 == v_src2
+    IR_OP_CMP_NE,      // v_dest = v_src1 != v_src2
     IR_OP_LABEL,       // .L0:
     IR_OP_JMP_IF_FALSE,// if (!v_src1) goto dest_label
     IR_OP_JMP,         // goto dest_label
     IR_OP_ARG,         // ARG v_src1
     IR_OP_LOAD_PARAM,  // v_dest = PARAM src1
     IR_OP_CALL,        // v_dest = CALL func_name
-    IR_OP_RET          // return v_src1
+    IR_OP_RET,         // return v_src1
+    IR_OP_USER_LABEL,
+    IR_OP_LOAD_LABEL_ADDR,
+    IR_OP_INDIRECT_JMP,
+    IR_OP_PTR_READ8,
+    IR_OP_PTR_WRITE8,
+    IR_OP_PTR_READ64,
+    IR_OP_PTR_WRITE64,
+    IR_OP_ALLOCA       // v_dest = alloca(src1.const_val_bytes)
 } IROpcode;
 
 typedef enum {

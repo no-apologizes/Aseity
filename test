@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# Initialize counters
+success_count=0
+failure_count=0
+
+for f in ~/CLionProjects/Aseity/Testing/Math/*.ase ~/CLionProjects/Aseity/Testing/Features/*.ase; do
+    # Ensure file actually exists
+    [ -e "$f" ] || continue
+
+    if ! aseity "$f" >/dev/null 2>&1; then
+        echo "🏳️‍⚧️ Errored: $(basename "$f")"
+        ((failure_count++))
+    else
+        echo "🩷 Success: $(basename "$f")"
+        ((success_count++))
+    fi
+done
+
+echo "------------------"
+echo "    Passed: $success_count"
+echo "    Failed: $failure_count"
+echo "------------------"
+
+# Exit with a non-zero status if any tests failed
+if [ "$failure_count" -gt 0 ]; then
+    ./test_print
+    exit 1
+fi

@@ -1,0 +1,13 @@
+import "Testing/Interfaces/math.poopy"| ./ Not required to end with anything specifc! \.
+import "Testing/Interfaces/math.poopy"| ./ Prove duplicate import guard works \.
+
+i64 origin(argc: i64, argv: str{}) [
+    print("--- Testing Interface Imports ---")|
+
+    i64 sq = math_square(12)|
+
+    print("Expected: 144")|
+    print(sq)|
+
+    0 return|
+]

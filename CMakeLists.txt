@@ -23,8 +23,7 @@ target_compile_options(aseity PRIVATE
                         -O3 -std=c17
                         -flto # Link-time optimization
                         -fno-strict-aliasing # Pointers of different types can point to the same memory location
-                        -Wall -Wextra -Wshadow -ggdb3  # Errors
-                        #-Wconversion -Wpedantic
+                        -Wall -Wextra -Wshadow -ggdb3 -Wconversion # Errors
                         )
 
 target_include_directories(aseity PRIVATE

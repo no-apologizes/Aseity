@@ -1,0 +1,6 @@
+import "Testing/Interfaces/math.poopy"| ./ Prove circular import guard works \.
+
+i64 math_square(x: i64) [
+    i64 result = x x *|
+    result return|
+]

@@ -1,0 +1,27 @@
+i64 origin(argc: i64, argv: str{}) [
+
+    ./ Open file \.
+    i64 fd = file_open("Testing/Features/file_io.ase")|
+
+    ./ Get exact byte size \.
+    i64 bytes = file_size(fd)|
+
+    ./ Allocate memory + 1 for null term \.
+    i64 alloc_size = bytes 1 +|
+    i64 buffer = malloc(alloc_size)|
+
+    ./ Read file into kernel memory \.
+    file_read(fd, buffer, bytes)|
+
+    ./ Write null terminator to end of buffer \.
+    i64 term_addr = buffer bytes +|
+    ptr_write_u8(term_addr, 0)|
+
+    ./ Print the buffer as a string (ptr cast) \.
+    print_str(buffer)|
+
+    ./ Cleanup \.
+    file_close(fd)|
+
+    0 return|
+]

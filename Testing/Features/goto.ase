@@ -1,0 +1,24 @@
+i64 origin(argc: i64, argv: str{}) [
+    i64 state = 0|
+
+    ./ Store the address of $STATE_TWO into a 64-bit integer \.
+    i64 jmp_ptr = $STATE_TWO|
+
+    ./ Jump directly to the pointer \.
+    jmp_ptr goto|
+
+    $STATE_ONE:|
+        print("Error: Hit State One")|
+        0 return|
+
+    $STATE_TWO:|
+        print("Success: Jumped over State One and hit State Two")|
+
+        ./ Reassign the pointer and jump back \.
+        i64 jmp_ptr = $STATE_THREE|
+        jmp_ptr goto|
+
+    $STATE_THREE:|
+        print("Success: Jumped to State Three")|
+        0 return|
+]

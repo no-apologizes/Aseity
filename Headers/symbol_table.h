@@ -5,6 +5,20 @@
 // Linked list of hash tables
 #define MAX_SYMBOL_BUCKETS 64
 
+typedef struct FieldDef {
+    char name[MAX_VAR_LENGTH];
+    char type_name[MAX_VAR_LENGTH];
+    size_t offset;
+    struct FieldDef *next;
+} FieldDef;
+
+typedef struct StructDef {
+    char name[MAX_VAR_LENGTH];
+    size_t total_size;
+    FieldDef *fields;
+    struct StructDef *next;
+} StructDef;
+
 typedef struct Symbol{
     char name[MAX_VAR_LENGTH];      // 'a'
     char type_name[MAX_VAR_LENGTH]; // 'i64'
@@ -22,6 +36,7 @@ typedef struct Scope {
 typedef struct SymbolTable {
     Scope *current_scope;
     Scope *global_scope;
+    StructDef *struct_registry;
 } SymbolTable;
 
 // Scope stack management

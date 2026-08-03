@@ -5,6 +5,7 @@
 #include <llvm-c/Transforms/PassBuilder.h>
 #include <llvm-c/Types.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,15 @@ static LLVMModuleRef module;   // The global container for functions, basic bloc
 // All basic blocks must also end with a term instruction like br(branch) or ret(return)
 static LLVMBuilderRef builder; // The instruction emission cursor (IR Builder) used to append instructions to basic blocks https://llvm.org/doxygen/classllvm_1_1BasicBlock.html
 
+// For user computed gotos
+typedef struct {
+    char name[MAX_VAR_LENGTH];
+    LLVMBasicBlockRef block_ref;
+} UserLabelMap;
+
+UserLabelMap user_label_map[128];
+size_t user_label_count = 0;
+
 typedef struct {
     char name[MAX_VAR_LENGTH];
     LLVMValueRef alloca_ptr;
@@ -28,12 +38,26 @@ typedef struct {
     LLVMBasicBlockRef block_ref;
 } LabelBlockMap; // Associative mapping binding a 3AC numeric label ID(label_id) to its corresponding LLVM basic block handle(block_ref)
 
+static LLVMIntPredicate get_llvm_cmp_pred(IROpcode op) {
+    switch (op) {
+        case IR_OP_CMP_EQ: return LLVMIntEQ;
+        case IR_OP_CMP_NE: return LLVMIntNE;
+        case IR_OP_CMP_LT: return LLVMIntSLT;
+        case IR_OP_CMP_LE: return LLVMIntSLE;
+        case IR_OP_CMP_GT: return LLVMIntSGT;
+        case IR_OP_CMP_GE: return LLVMIntSGE;
+        default:           return LLVMIntEQ;
+    }
+}
+
 void codegen_init(const char *module_name) { // Instantiates the global llvm context, creates and named translation unit called module, and initializes the IR builder
     ctx = LLVMContextCreate();
     module = LLVMModuleCreateWithNameInContext(module_name, ctx); // Translation units are units of compilation that represents a single, self-contained source code file after it has processed all macro expansions and header inclusions
                                                                   // https://stackoverflow.com/questions/7146425/llvm-translation-unit#:~:text=So%2C%20translation%20unit%20is%20the%20single%20source%20file%20%28file%2Ec%29%20after%20preprocessing%20%28all%20%23included%20%2A%2Eh%20files%20instantiated%2C%20all%20macro%20are%20expanded%2C%20all%20comments%20are%20skipped%2C%20and%20file%20is%20ready%20for%20tokenizing%29%2E
     builder = LLVMCreateBuilderInContext(ctx);
 }
+
+// As you can see, LLVM is very documentation heavy and apparently llvm-c has a lot of boilderplate
 
 // Explicitly register runtime C function prototypes with exact ABI types
 static LLVMValueRef get_runtime_function(const char *name) {
@@ -152,7 +176,7 @@ void codegen_lower_function(const IRFunction *ir_func) {
             param_types[i] = LLVMInt64TypeInContext(ctx);
         }
 
-         LLVMTypeRef func_type = LLVMFunctionType(ret_type, param_types, ir_func->param_count, 0);
+        LLVMTypeRef func_type = LLVMFunctionType(ret_type, param_types, ir_func->param_count, 0);
         llvm_func = LLVMAddFunction(module, ir_func->func_name, func_type);
         free(param_types);
     }
@@ -169,6 +193,7 @@ void codegen_lower_function(const IRFunction *ir_func) {
     size_t arg_count = 0;
 
     // Pre-scan labels
+    // Allocate basic blocks for user label ahead of time
     for (size_t i = 0; i < ir_func->count; i++) {
         IRInstr instr = ir_func->instructions[i];
         if (instr.op == IR_OP_LABEL) {
@@ -177,13 +202,33 @@ void codegen_lower_function(const IRFunction *ir_func) {
             LLVMBasicBlockRef bb = LLVMAppendBasicBlockInContext(ctx, llvm_func, block_name);
             label_map[label_count++] = (LabelBlockMap){ instr.dest.label_id, bb };
         }
+        else if (instr.op == IR_OP_USER_LABEL) {
+            if (user_label_count >= 128) {
+                fprintf(stderr, "Compiler Error: Exceeded 128 user labels in function.\n");
+                exit(EXIT_FAILURE);
+            }
+            LLVMBasicBlockRef bb = LLVMAppendBasicBlockInContext(ctx, llvm_func, instr.dest.name);
+            strncpy(user_label_map[user_label_count].name, instr.dest.name, MAX_VAR_LENGTH - 1);
+            user_label_map[user_label_count].block_ref = bb;
+            user_label_count++;
+        }
     }
+
+    // GNU C statement expressions are used here as you cannot pass a type name or raw LLVM type constructor macro directly as an argument to a function
+    // macro expansion also ensures that any temporary compiler context or immediate variables remain bound directly within the caller's block scope if necessary
 
     #define GET_LABEL_BB(lbl_id) ({ \
         LLVMBasicBlockRef _lbl_target_bb = NULL; \
         for (size_t k = 0; k < label_count; k++) { \
             if (label_map[k].label_id == (lbl_id)) { _lbl_target_bb = label_map[k].block_ref; break; } \
         } _lbl_target_bb; \
+    })
+
+    #define GET_USER_LABEL_BB(lbl_name) ({ \
+        LLVMBasicBlockRef _lbl_bb = NULL; \
+        for (size_t k = 0; k < user_label_count; k++) { \
+            if (strcmp(user_label_map[k].name, (lbl_name)) == 0) { _lbl_bb = user_label_map[k].block_ref; break; } \
+        } _lbl_bb; \
     })
 
     #define GET_VAR_ALLOCA(var_name, llvm_type) ({ \
@@ -264,13 +309,12 @@ void codegen_lower_function(const IRFunction *ir_func) {
                 break;
             }
 
-                /*
-            case IR_OP_ADD:
-                vregs[instr.dest.vreg_id] = LLVMBuildAdd(builder, vregs[instr.src1.vreg_id], vregs[instr.src2.vreg_id], "add_tmp");
-                break;
-                */
-
-            case IR_OP_CMP_LT: {
+            case IR_OP_CMP_EQ:
+            case IR_OP_CMP_NE:
+            case IR_OP_CMP_LT:
+            case IR_OP_CMP_LE:
+            case IR_OP_CMP_GT:
+            case IR_OP_CMP_GE: {
                 LLVMValueRef lhs = vregs[instr.src1.vreg_id];
                 LLVMValueRef rhs = vregs[instr.src2.vreg_id];
                 LLVMTypeRef ltype = LLVMTypeOf(lhs);
@@ -282,7 +326,8 @@ void codegen_lower_function(const IRFunction *ir_func) {
                         lhs = LLVMBuildZExt(builder, lhs, rtype, "zext_lhs");
                     }
                 }
-                LLVMValueRef cmp = LLVMBuildICmp(builder, LLVMIntSLT, lhs, rhs, "cmp_tmp");
+                LLVMIntPredicate pred = get_llvm_cmp_pred(instr.op);
+                LLVMValueRef cmp = LLVMBuildICmp(builder, pred, lhs, rhs, "cmp_tmp");
                 vregs[instr.dest.vreg_id] = LLVMBuildZExt(builder, cmp, LLVMInt64TypeInContext(ctx), "cmp_ext");
                 break;
             }
@@ -376,81 +421,95 @@ void codegen_lower_function(const IRFunction *ir_func) {
                 break;
             }
 
-            /*
-            case IR_OP_CALL: {
-                // Intrinsic override: map 'print' to C's 'printf'
-                // This will prob be the only hardcoded function unlike where C needs the std lib
-                // I will prob write my own print specifcally for this too
-                // This can only print i64
-                / *
-                if (strcmp(instr.src1.name, "print") == 0) {
-                    LLVMValueRef printf_func = LLVMGetNamedFunction(module, "printf");
-                    if (!printf_func) {
-                        // Declare: i64 printf(i8*, ...)
-                        LLVMTypeRef printf_args[] = { LLVMPointerType(LLVMInt8TypeInContext(ctx), 0) };
-                        LLVMTypeRef printf_type = LLVMFunctionType(LLVMInt64TypeInContext(ctx), printf_args, 1, 1);
-                        printf_func = LLVMAddFunction(module, "printf", printf_type);
-                    }
-
-                    // Create the string format: signed 64-bit int
-                    LLVMValueRef fmt_str = LLVMBuildGlobalString(builder, "%lld\n", "fmt_i64"); // <- this controls the entire thing
-
-                    // Wire arguments into printf
-                    LLVMValueRef printf_args_vals[] = { fmt_str, call_args[0] };
-                    vregs[instr.dest.vreg_id] = LLVMBuildCall2(builder, LLVMGlobalGetValueType(printf_func), printf_func, printf_args_vals, 2, "printf_tmp");
-                    arg_count = 0;
-                    break;
-                }
-                */ /*
-
-                if (strcmp(instr.src1.name, "print") == 0) {
-                    LLVMValueRef print_func = LLVMGetNamedFunction(module, "aseity_print_i128");
-                    if (!print_func) {
-                        LLVMTypeRef print_args[] = { LLVMInt64TypeInContext(ctx) };
-                        LLVMTypeRef print_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx), print_args, 1, 0);
-                        print_func = LLVMAddFunction(module, "aseity_print_i128", print_type);
-                    }
-
-                     LLVMValueRef print_args_vals[] = { call_args[0] };
-                     vregs[instr.dest.vreg_id] = LLVMBuildCall2(builder, LLVMGlobalGetValueType(print_func), print_func, print_args_vals, 1, "");
-                     arg_count = 0;
-                     break;
-                 }
-
-                LLVMValueRef target_func = LLVMGetNamedFunction(module, instr.src1.name);
-                if (!target_func) {
-                    // Forward declaration stub (variadic to allow anything)
-                    LLVMTypeRef func_type = LLVMFunctionType(LLVMInt64TypeInContext(ctx), NULL, 0, 1);
-                    target_func = LLVMAddFunction(module, instr.src1.name, func_type);
-                }
-                LLVMTypeRef target_type = LLVMGlobalGetValueType(target_func);
-
-                // Strictly match args to the signature to prevent LLVM crashing
-                size_t expected = LLVMCountParams(target_func);
-                LLVMValueRef safe_args[16];
-                size_t safe_count = 0;
-
-                for (size_t k = 0; k < expected; k++) {
-                    // Pad missing arguments with 0 so LLVM is satisfied
-                    safe_args[safe_count++] = (k < arg_count) ? call_args[k] : LLVMConstInt(LLVMInt64TypeInContext(ctx), 0, 0);
-                }
-
-                // If variadic, append the rest
-                if (LLVMIsFunctionVarArg(target_type)) {
-                    for (size_t k = expected; k < arg_count; k++) {
-                        safe_args[safe_count++] = call_args[k];
-                    }
-                }
-
-                vregs[instr.dest.vreg_id] = LLVMBuildCall2(builder, target_type, target_func, safe_args, safe_count, "call_tmp");
-                arg_count = 0;
-                break;
-            }
-            */
-
-            case IR_OP_RET:
+            case IR_OP_RET: {
                 LLVMBuildRet(builder, vregs[instr.src1.vreg_id]);
                 break;
+            }
+
+            case IR_OP_USER_LABEL: {
+                LLVMBasicBlockRef target_bb = GET_USER_LABEL_BB(instr.dest.name);
+                if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(builder))) {
+                    LLVMBuildBr(builder, target_bb); // Cap fallthrough edge
+                }
+                LLVMPositionBuilderAtEnd(builder, target_bb);
+                break;
+            }
+
+            case IR_OP_LOAD_LABEL_ADDR: {
+                LLVMBasicBlockRef target_bb = GET_USER_LABEL_BB(instr.src1.name);
+                if (!target_bb) {
+                    fprintf(stderr, "Codegen Error: Unresolved forward reference to label '%s'\n", instr.src1.name);
+                    exit(EXIT_FAILURE);
+                }
+                // Pull the internal block address and cast i8* to i64 for Aseity's virtual register limits
+                LLVMValueRef blk_addr = LLVMBlockAddress(llvm_func, target_bb);
+                vregs[instr.dest.vreg_id] = LLVMBuildPtrToInt(builder, blk_addr, LLVMInt64TypeInContext(ctx), "lbl_addr_cast");
+                break;
+            }
+
+            case IR_OP_INDIRECT_JMP: {
+                LLVMValueRef ptr_i64 = vregs[instr.src1.vreg_id];
+                // Cast i64 pointer memory back to LLVM i8* pointer representation
+                LLVMValueRef ptr_val = LLVMBuildIntToPtr(builder, ptr_i64, LLVMPointerType(LLVMInt8TypeInContext(ctx), 0), "jmp_ptr");
+
+                // Wire all potential destinations globally into the instruction
+                LLVMValueRef indirect_br = LLVMBuildIndirectBr(builder, ptr_val, user_label_count);
+                for (size_t k = 0; k < user_label_count; k++) {
+                    LLVMAddDestination(indirect_br, user_label_map[k].block_ref);
+                }
+                break;
+            }
+
+            case IR_OP_PTR_READ8: {
+                LLVMValueRef addr_i64 = vregs[instr.src1.vreg_id];
+                LLVMValueRef ptr = LLVMBuildIntToPtr(builder, addr_i64, LLVMPointerType(LLVMInt8TypeInContext(ctx), 0), "ptr8");
+                LLVMValueRef val8 = LLVMBuildLoad2(builder, LLVMInt8TypeInContext(ctx), ptr, "load8");
+                vregs[instr.dest.vreg_id] = LLVMBuildZExt(builder, val8, LLVMInt64TypeInContext(ctx), "zext8");
+                break;
+            }
+
+            case IR_OP_PTR_WRITE8: {
+                LLVMValueRef addr_i64 = vregs[instr.src1.vreg_id];
+                LLVMValueRef val_i64  = vregs[instr.src2.vreg_id];
+                LLVMValueRef ptr = LLVMBuildIntToPtr(builder, addr_i64, LLVMPointerType(LLVMInt8TypeInContext(ctx), 0), "ptr8");
+                LLVMValueRef val8 = LLVMBuildTrunc(builder, val_i64, LLVMInt8TypeInContext(ctx), "trunc8");
+                LLVMBuildStore(builder, val8, ptr);
+                break;
+            }
+
+            case IR_OP_PTR_READ64: {
+                LLVMValueRef addr_i64 = vregs[instr.src1.vreg_id];
+                LLVMValueRef ptr = LLVMBuildIntToPtr(builder, addr_i64, LLVMPointerType(LLVMInt64TypeInContext(ctx), 0), "ptr64");
+                LLVMValueRef val64 = LLVMBuildLoad2(builder, LLVMInt64TypeInContext(ctx), ptr, "load64");
+                vregs[instr.dest.vreg_id] = val64;
+                break;
+            }
+
+            case IR_OP_PTR_WRITE64: {
+                LLVMValueRef addr_i64 = vregs[instr.src1.vreg_id];
+                LLVMValueRef val_i64  = vregs[instr.src2.vreg_id];
+                LLVMValueRef ptr = LLVMBuildIntToPtr(builder, addr_i64, LLVMPointerType(LLVMInt64TypeInContext(ctx), 0), "ptr64");
+                LLVMBuildStore(builder, val_i64, ptr);
+                break;
+            }
+
+            case IR_OP_ALLOCA: {
+                // Allocate a contiguous byte array on the stack matching the struct's total size
+                LLVMTypeRef arr_type = LLVMArrayType(LLVMInt8TypeInContext(ctx), instr.src1.const_val);
+
+                // Position builder in the entry block for mem2reg compatibility
+                LLVMBuilderRef tmp_builder = LLVMCreateBuilderInContext(ctx);
+                LLVMValueRef first_instr = LLVMGetFirstInstruction(entry_bb);
+                if (first_instr) LLVMPositionBuilderBefore(tmp_builder, first_instr);
+                else LLVMPositionBuilderAtEnd(tmp_builder, entry_bb);
+
+                LLVMValueRef alloca_ref = LLVMBuildAlloca(tmp_builder, arr_type, "struct_alloca");
+                LLVMDisposeBuilder(tmp_builder);
+
+                // Cast the stack address to an i64 for Aseity's pointer semantics
+                vregs[instr.dest.vreg_id] = LLVMBuildPtrToInt(builder, alloca_ref, LLVMInt64TypeInContext(ctx), "alloca_ptr");
+                break;
+            }
 
             case IR_OP_ADD: {
                 LLVMValueRef lhs = vregs[instr.src1.vreg_id];
@@ -497,6 +556,22 @@ void codegen_lower_function(const IRFunction *ir_func) {
                     }
                 }
                 vregs[instr.dest.vreg_id] = LLVMBuildMul(builder, lhs, rhs, "mul_tmp");
+                break;
+            }
+
+            case IR_OP_MOD: {
+                LLVMValueRef lhs = vregs[instr.src1.vreg_id];
+                LLVMValueRef rhs = vregs[instr.src2.vreg_id];
+                LLVMTypeRef ltype = LLVMTypeOf(lhs);
+                LLVMTypeRef rtype = LLVMTypeOf(rhs);
+                if (ltype != rtype) {
+                    if (LLVMGetIntTypeWidth(ltype) > LLVMGetIntTypeWidth(rtype)) {
+                        rhs = LLVMBuildZExt(builder, rhs, ltype, "zext_rhs");
+                    } else {
+                        lhs = LLVMBuildZExt(builder, lhs, rtype, "zext_lhs");
+                    }
+                }
+                vregs[instr.dest.vreg_id] = LLVMBuildSRem(builder, lhs, rhs, "rem_tmp");
                 break;
             }
 

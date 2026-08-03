@@ -1,0 +1,25 @@
+i64 origin(argc: i64, argv: str{}) [
+
+    ./ Allocate 4 bytes \.
+    i64 ptr = malloc(4)|
+
+    ./ Write ASCII values (A, B, C, \0) byte-by-byte \.
+    ptr_write_u8(ptr, 65)|
+    ptr_write_u8(ptr 1 +, 66)|
+    ptr_write_u8(ptr 2 +, 67)|
+    ptr_write_u8(ptr 3 +, 0)|
+
+    ./ Read the bytes back as 64-bit integers (Zero-Extended) \.
+    i64 char_a = ptr_read_u8(ptr)|
+    i64 char_b = ptr_read_u8(ptr 1 +)|
+    i64 char_c = ptr_read_u8(ptr 2 +)|
+    i64 null_term = ptr_read_u8(ptr 3 +)|
+
+    print("Expected: 65, 66, 67, 0")|
+    print(char_a)|
+    print(char_b)|
+    print(char_c)|
+    print(null_term)|
+
+    0 return|
+]

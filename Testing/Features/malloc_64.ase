@@ -1,0 +1,26 @@
+i64 origin(argc: i64, argv: str{}) [
+
+    ./ Allocate 32 bytes (4 * 8-byte integers) \.
+    i64 ptr = malloc(32)|
+
+    ./ Write 64-bit words into memory using pointer arithmetic \.
+    ptr_write64(ptr, 100)|
+    ptr_write64(ptr 8 +, 200)|
+    ptr_write64(ptr 16 +, 300)|
+    ptr_write64(ptr 24 +, 400)|
+
+    ./ Read the 64-bit words back out \.
+    i64 a = ptr_read64(ptr)|
+    i64 b = ptr_read64(ptr 8 +)|
+    i64 c = ptr_read64(ptr 16 +)|
+    i64 d = ptr_read64(ptr 24 +)|
+
+    ./ Compute the sum \.
+    i64 sum = a b + c + d +|
+
+    print("Expected Sum: 1000")|
+    print("Actual Sum:")|
+    print(sum)|
+
+    0 return|
+]

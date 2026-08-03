@@ -1,10 +1,14 @@
 #include "Headers/lexer.h"
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define likely(a) __builtin_expect(!!(a), 1)
 #define unlikely(a) __builtin_expect(!!(a), 0)
+#define MAX_INCLUDE_DEPTH 16
+
 
 // Basically the goal is because we're targeting a single thread, our bottleneck is slow memory allocation via malloc or otherwise
 // This is a Type 3 grammar
@@ -22,6 +26,26 @@ typedef struct {
 static LexerState S; // 'S' for 'scanner' as it's much easier to type than capital L
 static const void *dispatch_table[256]; // Array of 256 for every possible ASCII byte
 static bool table_initialized = false;
+
+static LexerState state_stack[MAX_INCLUDE_DEPTH];
+static int state_depth = 0;
+
+void lexer_push_source(const char *source) {
+    if (state_depth >= MAX_INCLUDE_DEPTH) {
+        fprintf(stderr, "Compiler Error: Maximum import depth of %d exceeded.\n", MAX_INCLUDE_DEPTH);
+        exit(EXIT_FAILURE);
+    }
+    state_stack[state_depth++] = S;
+    S.cursor = source;
+    S.line = 1;
+    S.column = 1;
+}
+
+bool lexer_pop_source(void) {
+    if (state_depth == 0) return false;
+    S = state_stack[--state_depth];
+    return true;
+}
 
 static inline char advance(void) {
     char c = *S.cursor;
@@ -121,14 +145,16 @@ static inline TokenType match_keyword(const char *start, size_t length) {
             if (strncmp(start, "str", 3) == 0) return TOKEN_TYPE;
             break;
         case 4:
+            if (strncmp(start, "goto", 4) == 0) return TOKEN_GOTO;
             if (strncmp(start, "bool", 4) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "drop", 4) == 0) return TOKEN_DROP;
             if (strncmp(start, "i128", 4) == 0) return TOKEN_TYPE;
             if (strncmp(start, "u128", 4) == 0) return TOKEN_TYPE;
             if (strncmp(start, "f128", 4) == 0) return TOKEN_TYPE;
             break;
         case 6:
             if (strncmp(start, "return", 6) == 0) return TOKEN_RETURN;
+            if (strncmp(start, "import", 6) == 0) return TOKEN_IMPORT;
+            if (strncmp(start, "struct", 6) == 0) return TOKEN_STRUCT;
             break;
         default: break;
     }
@@ -158,14 +184,16 @@ Token lexer_next_token(void) {
         }
 
         dispatch_table['\0'] = &&lex_eof;
+        dispatch_table['$']  = &&lex_label_ref;
         dispatch_table['=']  = &&lex_equals;
         dispatch_table['+']  = &&lex_plus;
         dispatch_table['-']  = &&lex_minus;
         dispatch_table['*']  = &&lex_mul;
+        dispatch_table['%']  = &&lex_mod;
         dispatch_table['<']  = &&lex_operator;
         dispatch_table['>']  = &&lex_operator;
         dispatch_table['!']  = &&lex_operator;
-        dispatch_table['%']  = &&lex_operator;
+        //dispatch_table['%']  = &&lex_operator;
         dispatch_table['/']  = &&lex_div;
         dispatch_table['|']  = &&lex_term;
         dispatch_table['(']  = &&lex_lparen;
@@ -195,11 +223,10 @@ Token lexer_next_token(void) {
 
     goto *dispatch_table[(unsigned char)c];
 
-lex_operator: advance(); token.length = 1; token.type = TOKEN_OPERATOR; return token;
-lex_equals:   advance(); token.length = 1; token.type = TOKEN_EQUALS;   return token;
 lex_plus:     advance(); token.length = 1; token.type = TOKEN_PLUS;     return token;
 lex_minus:    advance(); token.length = 1; token.type = TOKEN_MINUS;    return token;
 lex_mul:      advance(); token.length = 1; token.type = TOKEN_MUL;      return token;
+lex_mod:      advance(); token.length = 1; token.type = TOKEN_MOD;  return token;
 lex_div:      advance(); token.length = 1; token.type = TOKEN_DIV;      return token;
 lex_term:     advance(); token.length = 1; token.type = TOKEN_TERM;     return token;
 lex_lparen:   advance(); token.length = 1; token.type = TOKEN_LPAREN;   return token;
@@ -210,6 +237,34 @@ lex_lbrace:   advance(); token.length = 1; token.type = TOKEN_LBRACE;   return t
 lex_rbrace:   advance(); token.length = 1; token.type = TOKEN_RBRACE;   return token;
 lex_colon:    advance(); token.length = 1; token.type = TOKEN_COLON;    return token;
 lex_comma:    advance(); token.length = 1; token.type = TOKEN_COMMA;    return token;
+
+lex_equals:
+    advance();
+    if (peek() == '=') {
+        advance();
+        token.length = 2;
+        token.type = TOKEN_OPERATOR;
+    } else if (peek() == '>') { // Support =>
+        advance();
+        token.length = 2;
+        token.type = TOKEN_OPERATOR;
+    } else {
+        token.length = 1;
+        token.type = TOKEN_EQUALS;
+    }
+    return token;
+
+lex_operator: {
+    char op_char = advance();
+    if ((op_char == '<' || op_char == '>' || op_char == '!') && peek() == '=') {
+        advance();
+        token.length = 2;
+    } else {
+        token.length = 1;
+    }
+    token.type = TOKEN_OPERATOR;
+    return token;
+}
 
 lex_period: {
     if (S.cursor[1] == '/') { // Check for a '/'
@@ -387,6 +442,21 @@ lex_unknown:
     token.length = 1;
     token.type = TOKEN_UNKNOWN;
     return token;
+
+lex_label_ref: {
+    advance(); // Consume '$'
+    while(1) {
+        unsigned char next = (unsigned char)peek();
+        if ((next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z') || // Add utf-8 support later
+            (next >= '0' && next <= '9') || next == '_') {
+            S.cursor++;
+            S.column++;
+        } else { break; }
+    }
+    token.length = (size_t)(S.cursor - token.start);
+    token.type = TOKEN_LABEL_REF;
+    return token;
+}
 
 lex_eof:
     token.length = 0;

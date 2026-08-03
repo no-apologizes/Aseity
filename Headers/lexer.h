@@ -9,18 +9,22 @@ typedef enum {
     TOKEN_NUMBER_LIT,               // TODO: Add the thing here : I don't know what I'm supposed to do
     TOKEN_UNKNOWN,
     TOKEN_TYPE,                     // Type keyword, e.g., i64, f32, etc.
+    TOKEN_STRUCT,                   // struct
     TOKEN_OPERATOR,
+
+    TOKEN_LABEL_REF,                // $LABEL_NAME
+    TOKEN_GOTO,                     // goto or jmp keyword
 
     //TOKEN_EXP or POW
     TOKEN_MUL,                      // *
     TOKEN_DIV,                      // /
     TOKEN_PLUS,                     // +
     TOKEN_MINUS,                    // -
+    TOKEN_MOD,                  // %
 
     TOKEN_EQUALS,                   // =
     TOKEN_IDENTIFIER,
     TOKEN_TERM,                     // |
-    TOKEN_DROP,
     TOKEN_LPAREN, TOKEN_RPAREN,     // ( and )
     TOKEN_LBRACKET, TOKEN_RBRACKET, // [ and ]
     TOKEN_LBRACE, TOKEN_RBRACE,     // { and }
@@ -31,7 +35,8 @@ typedef enum {
 
     TOKEN_STRING_LIT,               // " Example "
     TOKEN_CHAR_LIT,                 // '\n'
-    NUM_STR                         // i8*, string pointer
+
+    TOKEN_IMPORT
 } TokenType;
 
 // Numeric Literals
@@ -98,3 +103,7 @@ typedef struct {
 
 void lexer_init(const char *source);
 Token lexer_next_token(void);
+
+// For interface files
+void lexer_push_source(const char *source);
+bool lexer_pop_source(void);

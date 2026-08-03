@@ -25,6 +25,7 @@ typedef struct {
 
 typedef enum {
     MARKER_NONE,
+    MARKER_STRUCT,
     MARKER_LPAREN,
     MARKER_LBRACE,
     MARKER_LBRACKET,
@@ -88,17 +89,21 @@ ASTNode *parse_next_statement(void) {
         [TOKEN_NUMBER_LIT] = &&parse_literal,
         [TOKEN_UNKNOWN] = &&parse_ignore,
         [TOKEN_TYPE] = &&parse_type,
+        [TOKEN_STRUCT] = &&parse_struct,
         [TOKEN_OPERATOR] = &&parse_binop,
+
+        [TOKEN_LABEL_REF] = &&parse_label_ref,
+        [TOKEN_GOTO] = &&parse_goto,
 
         [TOKEN_MUL] = &&parse_binop,
         [TOKEN_DIV] = &&parse_binop,
+        [TOKEN_MOD] = &&parse_binop,
         [TOKEN_PLUS] = &&parse_binop,
         [TOKEN_MINUS] = &&parse_binop,
 
         [TOKEN_EQUALS] = &&parse_equals,
         [TOKEN_IDENTIFIER] = &&parse_identifier,
         [TOKEN_TERM] = &&parse_term,
-        [TOKEN_DROP] = &&parse_ignore,
 
         [TOKEN_LPAREN] = &&parse_lparen,
         [TOKEN_RPAREN] = &&parse_rparen,
@@ -116,7 +121,7 @@ ASTNode *parse_next_statement(void) {
 
         [TOKEN_STRING_LIT] = &&parse_literal,
         [TOKEN_CHAR_LIT] = &&parse_literal,
-        [NUM_STR] = &&parse_ignore,
+        [TOKEN_IMPORT] = &&parse_import,
     };
 
     ParserState P = { .stack_top = 0 };
@@ -139,6 +144,24 @@ parse_literal: {
 }
 
 parse_identifier: {
+    // Intercept Member Access: instance.field
+    if (P.stack_top >= 2 &&
+        P.stack[P.stack_top - 1]->type == NODE_UNKNOWN && ((MarkerNode*)P.stack[P.stack_top - 1])->marker == MARKER_PERIOD &&
+        P.stack[P.stack_top - 2]->type == NODE_IDENTIFIER) {
+
+        parser_pop(&P); // Pop MARKER_PERIOD
+        ASTNode *instance = parser_pop(&P);
+
+        ASTNode *member = allocate_node(NODE_MEMBER_ACCESS, t);
+        strncpy(member->member_access.instance_name, instance->var_decl.var_name, MAX_VAR_LENGTH - 1);
+        size_t len = t.length < (MAX_VAR_LENGTH - 1) ? t.length : (MAX_VAR_LENGTH - 1);
+        strncpy(member->member_access.field_name, t.start, len);
+        member->member_access.field_name[len] = '\0';
+
+        parser_push(&P, member);
+        t = lexer_next_token();
+        goto *dispatch[t.type];
+    }
     if (t.length == 2 && strncmp(t.start, "if", 2) == 0) {
         parser_push(&P, allocate_marker(MARKER_IF, t));
     } else if (t.length == 4 && strncmp(t.start, "else", 4) == 0) {
@@ -173,6 +196,12 @@ parse_type: {
     }
 
     parser_push(&P, node);
+    t = lexer_next_token();
+    goto *dispatch[t.type];
+}
+
+parse_struct: {
+    parser_push(&P, allocate_marker(MARKER_STRUCT, t));
     t = lexer_next_token();
     goto *dispatch[t.type];
 }
@@ -435,12 +464,78 @@ parse_return: {
     goto *dispatch[t.type];
 }
 
+parse_label_ref: {
+    ASTNode *node = allocate_node(NODE_LABEL_ADDR, t);
+    // Slice off the leading '$' for internal tracking
+    size_t len = t.length - 1 < (MAX_VAR_LENGTH - 1) ? t.length - 1 : (MAX_VAR_LENGTH - 1);
+    strncpy(node->user_label.label_name, t.start + 1, len);
+    node->user_label.label_name[len] = '\0';
+    parser_push(&P, node);
+    t = lexer_next_token();
+    goto *dispatch[t.type];
+}
+
+parse_goto: {
+    ASTNode *node = allocate_node(NODE_INDIRECT_JMP, t);
+    node->indirect_jmp.ptr_expr = parser_pop(&P);
+    parser_push(&P, node);
+    t = lexer_next_token();
+    goto *dispatch[t.type];
+}
+
 parse_term: {
     if (P.stack_top == 0) { // Continue if just a normal thing
         t = lexer_next_token();
         goto *dispatch[t.type];
     }
 
+    // Import Statement Reduction: `import "filename"|`
+    if (P.stack_top >= 1 && P.stack[P.stack_top - 1]->type == NODE_IMPORT) {
+        return parser_pop(&P);
+    }
+
+    // Struct Declaration: `struct Name [ ... ]|`
+    if (P.stack_top >= 3 &&
+        P.stack[P.stack_top - 3]->type == NODE_UNKNOWN && ((MarkerNode*)P.stack[P.stack_top - 3])->marker == MARKER_STRUCT &&
+        P.stack[P.stack_top - 2]->type == NODE_IDENTIFIER &&
+        P.stack[P.stack_top - 1]->type == NODE_BLOCK) {
+
+        ASTNode *block = parser_pop(&P);
+        ASTNode *ident = parser_pop(&P);
+        parser_pop(&P); // Pop MARKER_STRUCT
+
+        ASTNode *struct_decl = allocate_node(NODE_STRUCT_DECL, t);
+        strncpy(struct_decl->struct_decl.struct_name, ident->var_decl.var_name, MAX_VAR_LENGTH - 1);
+        struct_decl->struct_decl.fields = block;
+        parser_push(&P, struct_decl);
+    }
+    // Uninitialized Custom Stack Variable: `Vector3 vec|`
+    else if (P.stack_top >= 2 &&
+             P.stack[P.stack_top - 2]->type == NODE_IDENTIFIER &&
+             P.stack[P.stack_top - 1]->type == NODE_IDENTIFIER) {
+
+        ASTNode *var_name = parser_pop(&P);
+        ASTNode *type_name = parser_pop(&P);
+
+        ASTNode *var_decl = allocate_node(NODE_VAR_DECL, t);
+        strncpy(var_decl->var_decl.type_name, type_name->var_decl.var_name, MAX_VAR_LENGTH - 1);
+        strncpy(var_decl->var_decl.var_name, var_name->var_decl.var_name, MAX_VAR_LENGTH - 1);
+        var_decl->var_decl.value = NULL;
+        parser_push(&P, var_decl);
+    }
+    // Uninitialized Primitive Stack Variable: `i64 x|`
+    else if (P.stack_top >= 2 &&
+             P.stack[P.stack_top - 2]->type == NODE_VAR_DECL &&
+             P.stack[P.stack_top - 2]->var_decl.value == NULL &&
+             P.stack[P.stack_top - 2]->var_decl.var_name[0] == '\0' &&
+             P.stack[P.stack_top - 1]->type == NODE_IDENTIFIER) {
+
+        ASTNode *var_name = parser_pop(&P);
+        ASTNode *type_decl = parser_pop(&P);
+
+        strncpy(type_decl->var_decl.var_name, var_name->var_decl.var_name, MAX_VAR_LENGTH - 1);
+        parser_push(&P, type_decl);
+    }
     // We want something like 'i64 a = 1|'
     // fix: requires NODE_VAR_DECL at top-4 and MARKER_NONE(=) at top-2
     if (P.stack_top >= 4 &&
@@ -459,6 +554,31 @@ parse_term: {
         type_node->var_decl.value = val_node; // Attach value subtree: '1 3 +'
 
         parser_push(&P, type_node); // Push complete NODE_VAR_DECL back onto stack
+    }
+    else if (P.stack_top >= 3 &&
+         P.stack[P.stack_top - 3]->type == NODE_IDENTIFIER &&
+         P.stack[P.stack_top - 2]->type == NODE_UNKNOWN &&
+         ((MarkerNode*)P.stack[P.stack_top - 2])->marker == MARKER_NONE) {
+
+        ASTNode *val_node = parser_pop(&P);
+        (void)parser_pop(&P); // Discard '=' marker
+        ASTNode *id_node  = parser_pop(&P);
+
+        ASTNode *assign_node = allocate_node(NODE_VAR_DECL, t);
+        strncpy(assign_node->var_decl.var_name, id_node->var_decl.var_name, MAX_VAR_LENGTH - 1);
+        strncpy(assign_node->var_decl.type_name, "i64", MAX_VAR_LENGTH - 1);
+        assign_node->var_decl.value = val_node;
+
+        parser_push(&P, assign_node);
+    }
+    // Intercept label declarations
+    else if (P.stack_top >= 2 &&
+             P.stack[P.stack_top - 1]->type == NODE_UNKNOWN && ((MarkerNode*)P.stack[P.stack_top - 1])->marker == MARKER_COLON &&
+             P.stack[P.stack_top - 2]->type == NODE_LABEL_ADDR) {
+        parser_pop(&P); // Pop MARKER_COLON
+        ASTNode *lbl_node = parser_pop(&P);
+        lbl_node->type = NODE_USER_LABEL; // Mutate from address R-value to declaration block
+        parser_push(&P, lbl_node);
     }
     // Conditional Reduction(with if AND else block): `if (condition) [then] else [else]` <- 5 right here
     // fix: requires MARKER_IF at top-5 and MARKER_ELSE at top-2
@@ -533,6 +653,24 @@ parse_term: {
         return parser_pop(&P);
     }
 
+    t = lexer_next_token();
+    goto *dispatch[t.type];
+}
+
+parse_import: {
+    ASTNode *node = allocate_node(NODE_IMPORT, t);
+    t = lexer_next_token();
+    if (t.type == TOKEN_STRING_LIT) {
+        // Strip the quotes
+        size_t len = t.length >= 2 ? t.length - 2 : 0;
+        if (len > MAX_VAR_LENGTH - 1) len = MAX_VAR_LENGTH - 1;
+        strncpy(node->import_stmt.filename, t.start + 1, len);
+        node->import_stmt.filename[len] = '\0';
+    } else {
+        fprintf(stderr, "Syntax Error: Expected string literal after import.\n");
+        exit(EXIT_FAILURE);
+    }
+    parser_push(&P, node);
     t = lexer_next_token();
     goto *dispatch[t.type];
 }
