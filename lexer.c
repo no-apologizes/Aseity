@@ -335,7 +335,7 @@ lex_char: {
         if (current == '\'') advance();
         return token;
     }
-    if (unlikely(current == '\\')) {
+    else if (unlikely(current == '\\')) {
         advance(); // Skip backslash character escape
         advance(); // Skip nested escape sequence
     } else if ((unsigned char)current >= 128) {
