@@ -20,10 +20,12 @@ add_executable(aseity
 
 target_compile_options(aseity PRIVATE
                         -march=znver3 # AMD Zen 3 Cpu architecture
-                        -O3 -std=c17
+                        -std=c17
                         -flto # Link-time optimization
                         -fno-strict-aliasing # Pointers of different types can point to the same memory location
                         -Wall -Wextra -Wshadow -ggdb3 -Wconversion # Errors
+                        $<$<CONFIG:Debug>:-O0>
+                        $<$<CONFIG:Release>:-O3>
                         )
 
 target_include_directories(aseity PRIVATE
