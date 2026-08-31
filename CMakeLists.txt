@@ -8,6 +8,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 add_executable(aseity
         main.c
+        lexer.c
 )
 
 target_compile_options(aseity PRIVATE

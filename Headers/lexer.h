@@ -1,5 +1,6 @@
 #pragma once
 #include <stddef.h>
+#include <stdint.h>
 
 typedef enum {
     // Identifiers & Literals
@@ -10,6 +11,9 @@ typedef enum {
 
     // Keywords
     TOKEN_TYPE,                     // Type, e.g., i64, f32, etc.
+    TOKEN_CONST,                    // const
+    TOKEN_INLINE,                   // inline
+    // Other ones like static
     TOKEN_RETURN,                   // return
     TOKEN_GOTO,                     // goto
     TOKEN_LABEL_REF,                // $LABEL_NAME
@@ -60,7 +64,7 @@ typedef enum {
     TOKEN_GE,                       // >=
 
     // Logical Operators
-    TOKEN_AND,                      // /\    '
+    TOKEN_AND,                      // /\ '
     TOKEN_OR,                       // \/
     TOKEN_NOT,                      // !
     TOKEN_LSR,                      // Logical Shift Right: >>>
@@ -96,8 +100,8 @@ typedef struct {
     TokenType type;    // Token type
     const char *start; // First char in source string
     size_t length;     // Exact length of source token string
-    int line;          // Errors
-    int column;        // Errors
+    int64_t line;          // Errors
+    int64_t column;        // Errors
 } Token;
 
 void lexer_init(const char *source);
