@@ -59,21 +59,21 @@ f_static_inline uint32_t decode_utf8(const char* src, int32_t* out_bytes) {
         *out_bytes = 1;
         return lead;
     }
-    if ((lead & 0xE0) == 0xC0) {
+    if ((lead & 0xE0u) == 0xC0u) {
         if (unlikely(c[1] == '\0')) goto malformed; // Bounds check
         *out_bytes = 2;
-        return (((uint32_t)lead & 0x1F) << 6) | ((uint32_t)c[1] & 0x3F);
+        return (((uint32_t)lead & 0x1Fu) << 6u) | ((uint32_t)c[1] & 0x3Fu);
     }
-    if ((lead & 0xF0) == 0xE0) {
+    if ((lead & 0xF0u) == 0xE0u) {
         if (unlikely(c[1] == '\0' || c[2] == '\0')) goto malformed; // Bounds check
         *out_bytes = 3;
-        return (((uint32_t)lead & 0x0F) << 12) | (((uint32_t)c[1] & 0x3F) << 6) | ((uint32_t)c[2] & 0x3F);
+        return (((uint32_t)lead & 0x0Fu) << 12u) | (((uint32_t)c[1] & 0x3Fu) << 6u) | ((uint32_t)c[2] & 0x3Fu);
     }
     // Added proper F8 mask for 4-byte chars
-    if ((lead & 0xF8) == 0xF0) {
+    if ((lead & 0xF8u) == 0xF0u) {
         if (unlikely(c[1] == '\0' || c[2] == '\0' || c[3] == '\0')) goto malformed; // Bounds check
         *out_bytes = 4;
-        return (((uint32_t)lead & 0x07) << 18) | (((uint32_t)c[1] & 0x3F) << 12) | (((uint32_t)c[2] & 0x3F) << 6) | ((uint32_t)c[3] & 0x3F);
+        return (((uint32_t)lead & 0x07u) << 18u) | (((uint32_t)c[1] & 0x3Fu) << 12u) | (((uint32_t)c[2] & 0x3Fu) << 6u) | ((uint32_t)c[3] & 0x3Fu);
     }
 
     malformed:
@@ -154,7 +154,7 @@ f_static_inline void consume_other_identifiers(void) {
             continue;
         }
         if (c >= 0x80) {
-            int32_t bytes;
+            int32_t bytes = 0;
             const uint32_t cp = decode_utf8(S.cursor, &bytes);
             if (!is_unicode_identifier(cp)) break;
             S.cursor += bytes;
@@ -280,7 +280,7 @@ lex_alpha: {
 }
 
 lex_utf8: {
-    int32_t bytes;
+    int32_t bytes = 0;
     uint32_t cp = decode_utf8(S.cursor, &bytes);
     if (!is_unicode_identifier(cp)) {
         // Not an identifier codepoint, consume as an unknown token
@@ -457,7 +457,7 @@ lex_char: {
     if (peek() == '\\' && S.cursor[1] != '\0') {
         advance(); advance(); // Backslash + escaped char
     } else if ((unsigned char)peek() >= 0x80) {
-        int32_t bytes;
+        int32_t bytes = 0;
         decode_utf8(S.cursor, &bytes);
         S.cursor += bytes; S.column++; // Multibyte char literal 'ℵ'
     } else if (peek() != '\'' && peek() != '\0') { advance(); }

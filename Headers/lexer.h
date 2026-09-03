@@ -93,7 +93,7 @@ typedef enum {
     TOKEN_DOT,                      // .
 
     TOKEN_UNKNOWN,
-    TOKEN_EOF
+    TOKEN_EOF,
 } TokenType;
 
 typedef struct {

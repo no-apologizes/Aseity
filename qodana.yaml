@@ -18,6 +18,8 @@ exclude:
   - name: android-*
   - name: modernize-*
   - name: readability-identifier-length
+  - name: readability-magic-numbers
+  - name: readability-function-cognitive-complexity
   - name: cppcoreguidelines-avoid-magic-numbers
   - name: cppcoreguidelines-avoid-non-const-global-variables
   - name: concurrency-mt-unsafe
