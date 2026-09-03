@@ -1,6 +1,5 @@
 #include "Headers/lexer.h"
 #include <stdio.h>
-#include <stdlib.h>
 
 int main() { //const int argc, char **argv
     const char *andie =

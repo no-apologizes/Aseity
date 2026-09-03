@@ -1,0 +1,29 @@
+####################################################################################################################
+# WARNING: Do not store sensitive information in this file, as its contents will be included in the Qodana report. #
+####################################################################################################################
+version: "1.0"
+linter: qodana-clang
+profile:
+  name: qodana.recommended
+exclude:
+  - name: altera-*
+  - name: llvmlibc-*
+  - name: llvm-*
+  - name: fuchsia-*
+  - name: zircon-*
+  - name: objc-*
+  - name: darwin-*
+  - name: google-*
+  - name: abseil-*
+  - name: android-*
+  - name: modernize-*
+  - name: readability-identifier-length
+  - name: cppcoreguidelines-avoid-magic-numbers
+  - name: cppcoreguidelines-avoid-non-const-global-variables
+  - name: concurrency-mt-unsafe
+  - name: portability-avoid-pragma-once
+bootstrap: |
+  rm -rf build
+  mkdir -p build
+  cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Qodana
+  cmake --build build
