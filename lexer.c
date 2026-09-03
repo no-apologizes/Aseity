@@ -59,21 +59,21 @@ f_static_inline uint32_t decode_utf8(const char* src, int32_t* out_bytes) {
         *out_bytes = 1;
         return lead;
     }
-    if ((lead & 0xE0u) == 0xC0u) {
-        if (unlikely(c[1] == '\0')) goto malformed; // Bounds check
+    if ((lead & 0xE0U) == 0xC0U) {
+        if (unlikely(c[1] == '\0')) { goto malformed; } // Bounds check
         *out_bytes = 2;
-        return (((uint32_t)lead & 0x1Fu) << 6u) | ((uint32_t)c[1] & 0x3Fu);
+        return (((uint32_t)lead & 0x1FU) << 6U) | ((uint32_t)c[1] & 0x3FU);
     }
-    if ((lead & 0xF0u) == 0xE0u) {
-        if (unlikely(c[1] == '\0' || c[2] == '\0')) goto malformed; // Bounds check
+    if ((lead & 0xF0U) == 0xE0) {
+        if (unlikely(c[1] == '\0' || c[2] == '\0')) { goto malformed; } // Bounds check
         *out_bytes = 3;
-        return (((uint32_t)lead & 0x0Fu) << 12u) | (((uint32_t)c[1] & 0x3Fu) << 6u) | ((uint32_t)c[2] & 0x3Fu);
+        return (((uint32_t)lead & 0x0FU) << 12U) | (((uint32_t)c[1] & 0x3FU) << 6U) | ((uint32_t)c[2] & 0x3FU);
     }
     // Added proper F8 mask for 4-byte chars
-    if ((lead & 0xF8u) == 0xF0u) {
-        if (unlikely(c[1] == '\0' || c[2] == '\0' || c[3] == '\0')) goto malformed; // Bounds check
+    if ((lead & 0xF8U) == 0xF0U) {
+        if (unlikely(c[1] == '\0' || c[2] == '\0' || c[3] == '\0')) { goto malformed; } // Bounds check
         *out_bytes = 4;
-        return (((uint32_t)lead & 0x07u) << 18u) | (((uint32_t)c[1] & 0x3Fu) << 12u) | (((uint32_t)c[2] & 0x3Fu) << 6u) | ((uint32_t)c[3] & 0x3Fu);
+        return (((uint32_t)lead & 0x07U) << 18U) | (((uint32_t)c[1] & 0x3FU) << 12U) | (((uint32_t)c[2] & 0x3FU) << 6U) | ((uint32_t)c[3] & 0x3FU);
     }
 
     malformed:
@@ -94,49 +94,49 @@ f_static_inline bool is_unicode_identifier(const uint32_t cp) {
 f_static_inline TokenType match_keyword(const char *start, const size_t length) {
     switch (length) {
         case 2: {
-            if (strncmp(start, "i8", 2) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "u8", 2) == 0) return TOKEN_TYPE;
+            if (strncmp(start, "i8", 2) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "u8", 2) == 0) { return TOKEN_TYPE; }
 
-            if (strncmp(start, "if", 2) == 0) return TOKEN_IF;
-            if (strncmp(start, "as", 2) == 0) return TOKEN_AS;
+            if (strncmp(start, "if", 2) == 0) { return TOKEN_IF; }
+            if (strncmp(start, "as", 2) == 0) { return TOKEN_AS; }
             break;
         }
         case 3: {
-            if (strncmp(start, "i16", 3) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "u16", 3) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "i32", 3) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "u32", 3) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "f32", 3) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "i64", 3) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "u64", 3) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "f64", 3) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "str", 3) == 0) return TOKEN_TYPE;
+            if (strncmp(start, "i16", 3) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "u16", 3) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "i32", 3) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "u32", 3) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "f32", 3) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "i64", 3) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "u64", 3) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "f64", 3) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "str", 3) == 0) { return TOKEN_TYPE; }
             break;
         }
         case 4: {
-            if (strncmp(start, "bool", 4) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "i128", 4) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "u128", 4) == 0) return TOKEN_TYPE;
-            if (strncmp(start, "f128", 4) == 0) return TOKEN_TYPE;
+            if (strncmp(start, "bool", 4) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "i128", 4) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "u128", 4) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "f128", 4) == 0) { return TOKEN_TYPE; }
 
-            if (strncmp(start, "goto", 4) == 0) return TOKEN_GOTO;
-            if (strncmp(start, "else", 4) == 0) return TOKEN_ELSE;
+            if (strncmp(start, "goto", 4) == 0) { return TOKEN_GOTO; }
+            if (strncmp(start, "else", 4) == 0) { return TOKEN_ELSE; }
             break;
         }
         case 5: {
-            if (strncmp(start, "const", 5) == 0) return TOKEN_CONST;
-            if (strncmp(start, "break", 5) == 0) return TOKEN_BREAK;
+            if (strncmp(start, "const", 5) == 0) { return TOKEN_CONST; }
+            if (strncmp(start, "break", 5) == 0) { return TOKEN_BREAK; }
             break;
         }
         case 6: {
-            if (strncmp(start, "inline", 6) == 0) return TOKEN_INLINE;
-            if (strncmp(start, "return", 6) == 0) return TOKEN_RETURN;
-            if (strncmp(start, "struct", 6) == 0) return TOKEN_STRUCT;
-            if (strncmp(start, "import", 6) == 0) return TOKEN_IMPORT;
+            if (strncmp(start, "inline", 6) == 0) { return TOKEN_INLINE; }
+            if (strncmp(start, "return", 6) == 0) { return TOKEN_RETURN; }
+            if (strncmp(start, "struct", 6) == 0) { return TOKEN_STRUCT; }
+            if (strncmp(start, "import", 6) == 0) { return TOKEN_IMPORT; }
             break;
         }
         case 8: {
-            if (strncmp(start, "continue", 8) == 0) return TOKEN_CONTINUE;
+            if (strncmp(start, "continue", 8) == 0) { return TOKEN_CONTINUE; }
             break;
         }
         default: break;
@@ -156,7 +156,7 @@ f_static_inline void consume_other_identifiers(void) {
         if (c >= 0x80) {
             int32_t bytes = 0;
             const uint32_t cp = decode_utf8(S.cursor, &bytes);
-            if (!is_unicode_identifier(cp)) break;
+            if (!is_unicode_identifier(cp)) { break; }
             S.cursor += bytes;
             S.column++;
             continue;
@@ -414,7 +414,7 @@ lex_or: {
     else if (peek() == '|') {
         advance();
         if (peek() == '=') { advance(); t.type = TOKEN_BORE; }    // \|=
-        else t.type = TOKEN_BOR;                                  // \|
+        else { t.type = TOKEN_BOR; }                              // \|
     } else { t.type = TOKEN_UNKNOWN; } // lone backslash isn't a valid token
     t.length = (size_t)(S.cursor - t.start);
     return t;
@@ -447,7 +447,7 @@ lex_string: {
     }
     t.length = (size_t)(S.cursor - t.start);
     if (peek() == '"') { advance(); t.type = TOKEN_STRING_LIT; }
-    else t.type = TOKEN_UNKNOWN; // Hit EOF with no closing quote
+    else { t.type = TOKEN_UNKNOWN; } // Hit EOF with no closing quote
     return t;
 }
 
@@ -463,7 +463,7 @@ lex_char: {
     } else if (peek() != '\'' && peek() != '\0') { advance(); }
     t.length = (size_t)(S.cursor - t.start);
     if (peek() == '\'') { advance(); t.type = TOKEN_CHAR_LIT; }
-    else t.type = TOKEN_UNKNOWN; // Unterminated or empty ''
+    else { t.type = TOKEN_UNKNOWN; } // Unterminated or empty ''
     return t;
 }
 
