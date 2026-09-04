@@ -4,7 +4,7 @@ project(aseity C)
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-find_package(LLVM REQUIRED CONFIG)
+find_package(LLVM 22.1.8 REQUIRED CONFIG)
 
 add_executable(aseity
         main.c
@@ -19,7 +19,7 @@ add_executable(aseity
 )
 
 target_compile_options(aseity PRIVATE
-                        -march=znver3 # AMD Zen 3 Cpu architecture
+                        -march=native # AMD Zen 3 Cpu architecture
                         -std=c17
                         -flto # Link-time optimization
                         -fno-strict-aliasing # Pointers of different types can point to the same memory location

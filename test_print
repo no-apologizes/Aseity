@@ -1,5 +1,5 @@
 #!/bin/bash
-for f in ~/CLionProjects/Aseity/Testing/Math/*.ase; do aseity "$f"; done
-for f in ~/CLionProjects/Aseity/Testing/Features/*.ase; do aseity "$f"; done
+for f in ~/Projects/Aseity/Testing/Math/*.ase; do aseity "$f"; done
+for f in ~/Projects/Aseity/Testing/Features/*.ase; do aseity "$f"; done
 
-for f in ~/CLionProjects/Aseity/Testing/Interfaces/*.ase; do aseity "$f"; done
+for f in ~/Projects/Aseity/Testing/Interfaces/*.ase; do aseity "$f"; done

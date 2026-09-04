@@ -4,7 +4,7 @@
 success_count=0
 failure_count=0
 
-for f in ~/CLionProjects/Aseity/Testing/Math/*.ase ~/CLionProjects/Aseity/Testing/Features/*.ase; do
+for f in ~/Projects/Aseity/Testing/Math/*.ase ~/Projects/Aseity/Testing/Features/*.ase; do
     # Ensure file actually exists
     [ -e "$f" ] || continue
 
