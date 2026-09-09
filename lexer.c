@@ -64,7 +64,7 @@ f_static_inline uint32_t decode_utf8(const char* src, int32_t* out_bytes) {
         *out_bytes = 2;
         return (((uint32_t)lead & 0x1FU) << 6U) | ((uint32_t)c[1] & 0x3FU);
     }
-    if ((lead & 0xF0U) == 0xE0) {
+    if ((lead & 0xF0U) == 0xE0U) {
         if (unlikely(c[1] == '\0' || c[2] == '\0')) { goto malformed; } // Bounds check
         *out_bytes = 3;
         return (((uint32_t)lead & 0x0FU) << 12U) | (((uint32_t)c[1] & 0x3FU) << 6U) | ((uint32_t)c[2] & 0x3FU);
