@@ -1,5 +1,4 @@
 #include "Headers/lexer.h"
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -462,7 +461,7 @@ lex_char: {
         S.cursor += bytes; S.column++; // Multibyte char literal 'ℵ'
     } else if (peek() != '\'' && peek() != '\0') { advance(); }
     t.length = (size_t)(S.cursor - t.start);
-    if (peek() == '\'') { advance(); t.type = TOKEN_CHAR_LIT; }
+    if (peek() == '\'' && t.length > 0) { advance(); t.type = TOKEN_CHAR_LIT; }
     else { t.type = TOKEN_UNKNOWN; } // Unterminated or empty ''
     return t;
 }

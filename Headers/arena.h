@@ -1,10 +1,11 @@
 #pragma once
-
-// Okay so even though L1 caches are 64KB, half are for instructions and the other half are for data, and making this 64KB would push the second half into the L2 cache
 #include <stddef.h>
 #include <stdint.h>
-#define ARENA_PAGE_SIZE 32768 // 32KB rn, 1024 * 32
-#define NUM_SEGLIST_BUCKETS 4
+// Okay so even though L1 caches are 64KB, half are for instructions and the other half are for data, and making this 64KB would push the second half into the L2 cache
+enum {
+    ARENA_PAGE_SIZE = 32768, // 32KB rn, 1024 * 32
+    NUM_SEGLIST_BUCKETS = 4,
+};
 
 typedef struct ArenaPage {
     uint8_t *memory;

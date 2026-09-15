@@ -2,7 +2,6 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #define likely(a) __builtin_expect(!!(a), 1)
 #define unlikely(a) __builtin_expect(!!(a), 0)
@@ -22,9 +21,9 @@ HybridArena symbol_arena;
 // Helper
 static inline int get_seglist_bucket(const size_t size) {
     // Notice how they're all powers of 2
-    if (size <= 64) return 0;   // SymbolTable
-    if (size <= 256) return 1;  // Symbol
-    if (size <= 1024) return 2; // Scope
+    if (size <= 64) { return 0; }   // SymbolTable
+    if (size <= 256) { return 1; }  // Symbol
+    if (size <= 1024) { return 2; } // Scope
     return 3;                   // Fallback for oversized structs
 }
 
@@ -32,12 +31,12 @@ static ArenaPage *allocate_arena_page(const size_t size) {
     const size_t target_size = size > ARENA_PAGE_SIZE ? size : ARENA_PAGE_SIZE; // If true, set to size and if false set to ARENA_PAGE_SIZE
     ArenaPage *page = malloc(sizeof(ArenaPage));
     if (unlikely(!page)) {
-        fprintf(stderr, "Compiler Error(arena): Out of memory allocating ArenaPage header\n");
+        (void)fprintf(stderr, "Compiler Error(arena): Out of memory allocating ArenaPage header\n");
         exit(EXIT_FAILURE);
     }
     page->memory = malloc(target_size);
     if (unlikely(!page->memory)) {
-        fprintf(stderr, "Compiler Error(arena): Out of memory allocating ArenaPage buffer (%zu bytes)", target_size);
+        (void)fprintf(stderr, "Compiler Error(arena): Out of memory allocating ArenaPage buffer (%zu bytes)", target_size);
         exit(EXIT_FAILURE);
     }
     page->capacity = target_size;
@@ -160,7 +159,7 @@ void arena_reset_transient(HybridArena *arena) {
 }
 
 void arena_free_recyclable(HybridArena *arena, void *ptr, size_t size) {
-    if (unlikely(!ptr)) return;
+    if (unlikely(!ptr)) { return; }
     size = (size + 15) & ~(size_t)15; // 16 bytes
     if (size < sizeof(FreeNode)) {
         size = sizeof(FreeNode);

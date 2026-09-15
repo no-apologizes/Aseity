@@ -3,10 +3,10 @@
 
 int main() { //const int argc, char **argv
     const char *andie =
-        ""
         "str msg = \"Data payload: \\\"poses\\\"\\n\" \n"
         "bool flag = 'ℝ' \n"
-        "population 2 * return |";
+        "population 2 * return |\n"
+        "'' | 'x'";
 
     printf("Test script:\n");
     printf("%s\n\n", andie);

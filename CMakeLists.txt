@@ -12,6 +12,7 @@ add_executable(aseity
         main.c
         lexer.c
         arena.c
+        string_pool.c
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Qodana")
