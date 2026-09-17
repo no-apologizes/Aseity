@@ -34,8 +34,6 @@
     <list default="true" id="43e20710-5e6c-455c-b200-1a33b3bba8fd" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/compiler-architecture.md" beforeDir="false" afterPath="$PROJECT_DIR$/compiler-architecture.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/string_pool.c" beforeDir="false" afterPath="$PROJECT_DIR$/string_pool.c" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/type.c" beforeDir="false" afterPath="$PROJECT_DIR$/type.c" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -124,7 +122,9 @@
     <option name="path" value="$PROJECT_DIR$/.github/workflows/qodana_code_quality.yml" />
   </component>
   <component name="QodanaCloudProjectLink">
+    <option name="lastReportId" value="obPVx2" />
     <option name="linkedProjectId" value="dXvZ8" />
+    <option name="linkedProjectName" value="Aseity" />
     <option name="organizationId" value="P2PGk" />
     <option name="userId" value="EqM5x" />
   </component>
