@@ -5,6 +5,7 @@
 
 #define likely(a) __builtin_expect(!!(a), 1)
 #define unlikely(a) __builtin_expect(!!(a), 0)
+#define f_static_inline __attribute__((__always_inline__)) static inline
 
 // Global Compiler Arena Instantiations
 HybridArena ast_arena;
@@ -19,7 +20,7 @@ HybridArena symbol_arena;
  */
 
 // Helper
-static inline int get_seglist_bucket(const size_t size) {
+f_static_inline int get_seglist_bucket(const size_t size) {
     // Notice how they're all powers of 2
     if (size <= 64) { return 0; }   // SymbolTable
     if (size <= 256) { return 1; }  // Symbol
@@ -68,7 +69,7 @@ void arena_destroy(HybridArena *arena) {
     }
 }
 
-void *arena_alloc_transient(HybridArena *arena, size_t size) {
+void *arena_alloc_bump(HybridArena *arena, size_t size) {
     // 16-byte alignment for x86_64 archs
     size = (size + 15) & ~(size_t)15;
     ArenaPage *page = arena->current_page;
@@ -132,10 +133,10 @@ void *arena_alloc_recyclable(HybridArena *arena, size_t size) {
     }
 
     // Fallback to linear bump allocation if no slot is available
-    return arena_alloc_transient(arena, size);
+    return arena_alloc_bump(arena, size);
 }
 
-void arena_reset_transient(HybridArena *arena) {
+void arena_reset_bump(HybridArena *arena) {
     ArenaPage **prev_ptr = &arena->page_head;
     ArenaPage *current = arena->page_head;
 

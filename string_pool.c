@@ -3,8 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 
 #define unlikely(a) __builtin_expect(!!(a), 0)
+#define f_static_inline __attribute__((__always_inline__)) static inline
 
 enum {
     STRING_POOL_INITIAL_BUCKETS = 256,
@@ -18,8 +20,8 @@ typedef struct StringPoolEntry {
     struct StringPoolEntry *next;
 } StringPoolEntry;
 
-static inline uint32_t fnv_hash(const char *str, const size_t length) {
-    uint32_t fnv_offset_basis = 2166136261u;
+f_static_inline uint32_t fnv_hash(const char *str, const size_t length) {
+    uint32_t fnv_offset_basis = 2166136261U;
     for (size_t i = 0; i < length; i++) {
         fnv_offset_basis ^= (unsigned char)str[i];
         fnv_offset_basis *= 16777619u; // FNV Prime
@@ -54,7 +56,7 @@ uint32_t string_intern(StringPool *pool, const char *str, const size_t length) {
         }}
 
     // New string: copy into arena so it outlives whatever buffer 'str' came from
-    char *owned_copy = arena_alloc_transient(&ast_arena, length + 1);
+    char *owned_copy = arena_alloc_bump(&ast_arena, length + 1);
     memcpy(owned_copy, str, length);
     owned_copy[length] = '\0';
 
@@ -73,7 +75,7 @@ uint32_t string_intern(StringPool *pool, const char *str, const size_t length) {
     pool->handle_count++;
 
     // Link new entry into its bucket
-    StringPoolEntry *new_entry = arena_alloc_transient(&ast_arena, sizeof(StringPoolEntry));
+    StringPoolEntry *new_entry = arena_alloc_bump(&ast_arena, sizeof(StringPoolEntry));
     new_entry->str = owned_copy;
     new_entry->length = length;
     new_entry->handle = new_handle;

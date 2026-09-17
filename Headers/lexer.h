@@ -31,7 +31,6 @@ typedef enum {
     TOKEN_AMPERSAND,                // & for address-of and bitwise AND
     TOKEN_STAR,                     // * for mul and dereferencing
 
-
     // Arithmetic Operators
     TOKEN_OPERATOR,                 // Fallback for now, or user defined ones like ∈ or something
     TOKEN_EQUALS,                   // =
@@ -82,7 +81,6 @@ typedef enum {
     TOKEN_BSTE,                     // <<=
     TOKEN_BSRE,                     // >>=
 
-
     // Delimiters
     TOKEN_TERM,                     // |
     TOKEN_LPAREN, TOKEN_RPAREN,     // ( and )
@@ -100,8 +98,8 @@ typedef struct {
     TokenType type;    // Token type
     const char *start; // First char in source string
     size_t length;     // Exact length of source token string
-    int64_t line;          // Errors
-    int64_t column;        // Errors
+    int64_t line;      // Errors
+    int64_t column;    // Errors
 } Token;
 
 void lexer_init(const char *source);

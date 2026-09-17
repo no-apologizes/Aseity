@@ -31,7 +31,7 @@ extern HybridArena symbol_arena; // Recyclable lifetime (intrusive free-list for
 
 void arena_init(HybridArena *arena);
 void arena_destroy(HybridArena *arena);
-void *arena_alloc_transient(HybridArena *arena, size_t size);
+void *arena_alloc_bump(HybridArena *arena, size_t size);
 void *arena_alloc_recyclable(HybridArena *arena, size_t size);
-void arena_reset_transient(HybridArena *arena);
+void arena_reset_bump(HybridArena *arena);
 void arena_free_recyclable(HybridArena *arena, void *ptr, size_t size);
