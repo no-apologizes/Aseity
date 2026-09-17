@@ -7,7 +7,7 @@
 
 enum {
     TYPE_POOL_INITIAL_BUCKETS = 256,
-    NUM_prim_types = (TYPE_PTR), // Everything before the first complex type
+    NUM_PRIM_TYPES = (TYPE_PTR), // Everything before the first complex type
 };
 
 // Each hash bucket is a linked list of these, the entry owns a real type by value, so it never moves
@@ -17,7 +17,7 @@ typedef struct TypePoolEntry {
 } TypePoolEntry;
 
 // Small, fixed set of these, so a lookup table beats a hash table
-static Type prim_types[NUM_prim_types];
+static Type prim_types[NUM_PRIM_TYPES];
 
 // Complex types, hash-consed and one shared table for all four kinds because they're all accessed the same way
 static TypePoolEntry **compound_buckets;
@@ -147,7 +147,7 @@ Type *type_struct_declare(const uint32_t name_id, bool *out_already_declared) {
     // so a real struct of this would land in the same bucket
     Type probe = {.kind = TYPE_STRUCT};
     probe.structure.name_id = name_id;
-    size_t bucket = type_hash(&probe) % compound_bucket_count;
+    const size_t bucket = type_hash(&probe) % compound_bucket_count;
 
     for (TypePoolEntry *e = compound_buckets[bucket]; e; e = e->next) {
         if (e->type.kind == TYPE_STRUCT && e->type.structure.name_id == name_id) {

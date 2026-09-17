@@ -32,14 +32,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="43e20710-5e6c-455c-b200-1a33b3bba8fd" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/runConfigurations/Debug.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/runConfigurations/Debug.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/runConfigurations/Release.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/runConfigurations/Release.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Headers/arena.h" beforeDir="false" afterPath="$PROJECT_DIR$/Headers/arena.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Headers/lexer.h" beforeDir="false" afterPath="$PROJECT_DIR$/Headers/lexer.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Headers/types.h" beforeDir="false" afterPath="$PROJECT_DIR$/Headers/type.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arena.c" beforeDir="false" afterPath="$PROJECT_DIR$/arena.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/compiler-architecture.md" beforeDir="false" afterPath="$PROJECT_DIR$/compiler-architecture.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/string_pool.c" beforeDir="false" afterPath="$PROJECT_DIR$/string_pool.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/type.c" beforeDir="false" afterPath="$PROJECT_DIR$/type.c" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -67,7 +63,7 @@
     <option name="directoryName" value="tkb2wDkJ" />
   </component>
   <component name="ProblemsViewState">
-    <option name="selectedTabId" value="QODANA_PROBLEMS_VIEW_TAB" />
+    <option name="selectedTabId" value="CurrentFile" />
     <option name="showPreview" value="true" />
   </component>
   <component name="ProjectApplicationVersion">
@@ -128,9 +124,7 @@
     <option name="path" value="$PROJECT_DIR$/.github/workflows/qodana_code_quality.yml" />
   </component>
   <component name="QodanaCloudProjectLink">
-    <option name="lastReportId" value="k9VYYm" />
     <option name="linkedProjectId" value="dXvZ8" />
-    <option name="linkedProjectName" value="Aseity" />
     <option name="organizationId" value="P2PGk" />
     <option name="userId" value="EqM5x" />
   </component>
@@ -138,7 +132,7 @@
     <option name="cloudReportPersistedInfo">
       <CloudReportPersistedInfo>
         <option name="projectId" value="dXvZ8" />
-        <option name="reportId" value="k9VYYm" />
+        <option name="reportId" value="obPVx2" />
       </CloudReportPersistedInfo>
     </option>
   </component>

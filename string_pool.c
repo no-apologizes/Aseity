@@ -65,7 +65,7 @@ uint32_t string_intern(StringPool *pool, const char *str, const size_t length) {
         pool->handle_capacity *= 2;
         InternedString *temp = realloc(pool->handles, pool->handle_capacity * sizeof(InternedString));
         if (unlikely(temp == NULL)) {
-            fprintf(stderr, "String Interning: Growing handle-lookup array failed\n");
+            (void)fprintf(stderr, "String Interning: Growing handle-lookup array failed\n");
             exit(1);
         }
         pool->handles = temp;
