@@ -4,7 +4,7 @@ This is a compiler for the Aseity language
 - Statically typed
 - Strongly typed
 - No implicit conversions
-- Mostly infix,
+- Mostly postfix
 - At least postfix for math
 
 Aseity is a low-level language that is heavily inspired by C and fixes its weak typing while also enforcing more explicit typing.
@@ -38,7 +38,7 @@ W/error flags:
     - sub slicing out of bounds checking -Wsubslice-bounds
         - can't do arr{4..} if i64{3} arr = {0, 1, 2}
 
-Arrays:
+## Arrays:
 
 ``` i64{} view = passed_array{@}```
 is a mutable copy of the view into ```passed_array```,
@@ -62,7 +62,7 @@ aliasing keyword: alias
 ```
 i64{3} passed_array = {1, 2, 3}|
 
-./ don't know how func calls will work, ufcs or postfix \.
+./ don't know how func calls will work, ufcs, postfix, or ufcs sugar \.
 return array(passed_array)
 
 i64 array(passed_array: const i64{}) [
