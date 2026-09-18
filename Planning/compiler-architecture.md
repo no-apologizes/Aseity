@@ -10,7 +10,6 @@ This is a compiler for the Aseity language
 Aseity is a low-level language that is heavily inspired by C and fixes its weak typing while also enforcing more explicit typing.
 Comments are ` ./ comment \. `. There are no single-line comments.
 
-
 ## Parts:
 - Lexer:
     - Computed gotos
@@ -18,8 +17,9 @@ Comments are ` ./ comment \. `. There are no single-line comments.
 - Parser:
     - andie...
 
-
 # Planning
+
+const-ness lives on the ASTNode, not inside Type
 
 Maybe(Can be implemented at any time):
 - type aliases
@@ -33,10 +33,12 @@ Fix:
         - save first ./ row and col for errors, when depth goes from 0 to 1
 
 W/error flags:
-- truncation/lossy casting - Wlossy-cast
+- truncation/lossy casting -Wlossy-cast
 - slice out of bounds checking -Wslice-bounds
     - sub slicing out of bounds checking -Wsubslice-bounds
         - can't do arr{4..} if i64{3} arr = {0, 1, 2}
+
+Probably not default to no-alias 
 
 ## Arrays:
 

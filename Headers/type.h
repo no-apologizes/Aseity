@@ -3,7 +3,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-
 typedef enum {
     TYPE_UNIT,
     TYPE_NEVER,
@@ -27,41 +26,6 @@ typedef enum {
 } TypeKind;
 
 typedef struct Type Type;
-
-typedef struct {
-    uint32_t name_id;
-    Type *type;
-} StructField;
-
-struct Type {
-    TypeKind kind;
-    // 4 Bytes padding
-    size_t size_bytes;
-    size_t align_bytes;
-    union {
-        struct {
-            Type *pointee;
-            bool nullable;
-        } pointer;
-        struct {
-            Type *element;
-            size_t length;
-        } array;
-        struct {
-            uint32_t name_id;
-            uint32_t field_count; // While uint16_t would work and never be reached,
-                                    // code generators produce massive structs, so 65535 isn't a safe number
-            StructField *fields;
-            bool is_complete;
-        } structure;
-        struct {
-            Type *return_type;
-            uint16_t param_count; // uint16_t is fine here because you don't need more than 65k params
-                                    // and Java's JVM even limits it to 255
-            Type **params;
-        } function;
-    };
-};
 
 void type_init(void);
 Type *type_get_prim(TypeKind kind);

@@ -10,6 +10,41 @@ enum {
     NUM_PRIM_TYPES = (TYPE_PTR), // Everything before the first complex type
 };
 
+typedef struct {
+    uint32_t name_id;
+    Type *type;
+} StructField;
+
+struct Type {
+    TypeKind kind;
+    // 4 Bytes padding
+    size_t size_bytes;
+    size_t align_bytes;
+    bool hollow;
+    union {
+        struct {
+            Type *pointee;
+        } pointer;
+        struct {
+            Type *element;
+            size_t length;
+        } array;
+        struct {
+            uint32_t name_id;
+            uint32_t field_count; // While uint16_t would work and never be reached,
+            // code generators produce massive structs, so 65535 isn't a safe number
+            StructField *fields;
+            bool is_complete;
+        } structure;
+        struct {
+            Type *return_type;
+            uint16_t param_count; // uint16_t is fine here because you don't need more than 65k params
+            // and Java's JVM even limits it to 255
+            Type **params;
+        } function;
+    };
+};
+
 // Each hash bucket is a linked list of these, the entry owns a real type by value, so it never moves
 typedef struct TypePoolEntry {
     Type type;
@@ -22,7 +57,6 @@ static Type prim_types[NUM_PRIM_TYPES];
 // Complex types, hash-consed and one shared table for all four kinds because they're all accessed the same way
 static TypePoolEntry **compound_buckets;
 static size_t compound_bucket_count;
-
 
 void type_init(void) {
     prim_types[TYPE_UNIT]   = (Type){.kind = TYPE_UNIT};
