@@ -20,6 +20,11 @@ Comments are ` ./ comment \. `. There are no single-line comments.
 
 # Planning
 
+
+
+TODO:
+- hollow and alias keywords and finalize keywords for lexer
+
 const-ness lives on the ASTNode, not inside Type
 
 Maybe(Can be implemented at any time):
@@ -43,22 +48,22 @@ Probably not default to no-alias
 
 ## Arrays:
 
-``` i64{} view = passed_array{@}```
-is a mutable copy of the view into ```passed_array```,
-whereas ```i64 view = passed_array{0}``` is the first element of ```passed_array```
+`i64{} view = passed_array{@}`
+is a mutable copy of the view into `passed_array`,
+whereas `i64 view = passed_array{0}` is the first element of `passed_array`
 
 params are non-aliasing by default with an explicit keyword
 
 array sub slicing syntax
-if ```i64{10} arr = {0, 2, 3, 4, 5, 6, 7, 8, 9, 10}```
+if `i64{10} arr = {0, 2, 3, 4, 5, 6, 7, 8, 9, 10}`
 
-```arr{start..end}``` means arr{@}, implied full length: arr{0, len}
+arr{start..end}`means arr{@}, implied full length: arr{0, len}
 
-```arr{3..}``` implies upper bound, 3 to len: {4, 5, 6... 9, 10}, [3, len]
+`rr{3..}` implies upper bound, 3 to len: {4, 5, 6... 9, 10}, [3, len]
 
-```arr{..5}``` implies lower bound, 0 to 5: {0, 2, 3, 4, 5}, [0, 5]
+`arr{..5}` implies lower bound, 0 to 5: {0, 2, 3, 4, 5}, [0, 5]
 
-```arr{2..5}``` means slice from index 2 to 5: {3, 4, 5}, [2, 5]
+`arr{2..5}` means slice from index 2 to 5: {3, 4, 5}, [2, 5]
 
 aliasing keyword: alias
 
