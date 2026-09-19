@@ -1,0 +1,2 @@
+Only prims can be cast with `type(value)`, like `i64(x)`, as the lexer already disambiguates an identifier from a reserved type.
+Struct can't be cast as that's weird and most languages don't have it either. Lossy casting is with a flag `Wlossy-cast`, still don't know flag system yet.
