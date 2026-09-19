@@ -17,7 +17,7 @@ typedef struct {
 
 struct Type {
     TypeKind kind;
-    // 4 Bytes padding
+    // 4 bytes of padding
     size_t size_bytes;
     size_t align_bytes;
     bool hollow;
@@ -52,38 +52,39 @@ typedef struct TypePoolEntry {
 } TypePoolEntry;
 
 // Small, fixed set of these, so a lookup table beats a hash table
-static Type prim_types[NUM_PRIM_TYPES];
+// Doubled for hollow, UNIT, NEVER, and VILE still only ever use index [kind][0]
+static Type prim_types[NUM_PRIM_TYPES][2];
 
 // Complex types, hash-consed and one shared table for all four kinds because they're all accessed the same way
 static TypePoolEntry **compound_buckets;
 static size_t compound_bucket_count;
 
+// is hollow before or after the value?
+f_static_inline void hollow_wrap_size(const size_t base_size, const size_t base_align,
+                                        size_t *out_size, size_t *out_align) {
+    const size_t align = base_align > 0 ? base_align : 1;
+    const size_t tag_end = (1 + align - 1) & ~(align - 1);
+    size_t total = tag_end + base_size;
+    total = (total + align - 1) & ~(align - 1); // Final round up for struct alignment
+    *out_size = total;
+    *out_align = align;
+}
+
+// Sets both hollow and non-hollow types
+f_static_inline void set_prim(const TypeKind kind, const size_t size_bytes, const size_t align_bytes) {
+    prim_types[kind][0] = (Type){.kind = kind, .size_bytes = size_bytes, .align_bytes = align_bytes, .hollow = false};
+    size_t hsize, halign;
+    hollow_wrap_size(size_bytes, align_bytes, &hsize, &halign);
+    prim_types[kind][1] = (Type){.kind = kind, .size_bytes = hsize, .align_bytes = halign, .hollow = true};
+}
+
 void type_init(void) {
-    prim_types[TYPE_UNIT]   = (Type){.kind = TYPE_UNIT};
-    prim_types[TYPE_NEVER]  = (Type){.kind = TYPE_NEVER};
-    prim_types[TYPE_VILE]   = (Type){.kind = TYPE_VILE};
+    // Only one valid kind of these types
+    prim_types[TYPE_UNIT][0]  = (Type){.kind = TYPE_UNIT};
+    prim_types[TYPE_NEVER][0] = (Type){.kind = TYPE_NEVER};
+    //prim_types[TYPE_VILE][0]  = (Type){.kind = TYPE_VILE};
 
-    prim_types[TYPE_U8]   = (Type){.kind = TYPE_U8,   .size_bytes = 1,  .align_bytes = 1};
-    prim_types[TYPE_I8]   = (Type){.kind = TYPE_I8,   .size_bytes = 1,  .align_bytes = 1};
-    prim_types[TYPE_U16]  = (Type){.kind = TYPE_U16,  .size_bytes = 2,  .align_bytes = 2};
-    prim_types[TYPE_I16]  = (Type){.kind = TYPE_I16,  .size_bytes = 2,  .align_bytes = 2};
-    prim_types[TYPE_U32]  = (Type){.kind = TYPE_U32,  .size_bytes = 4,  .align_bytes = 4};
-    prim_types[TYPE_I32]  = (Type){.kind = TYPE_I32,  .size_bytes = 4,  .align_bytes = 4};
-    prim_types[TYPE_F32]  = (Type){.kind = TYPE_F32,  .size_bytes = 4,  .align_bytes = 4};
-    prim_types[TYPE_U64]  = (Type){.kind = TYPE_U64,  .size_bytes = 8,  .align_bytes = 8};
-    prim_types[TYPE_I64]  = (Type){.kind = TYPE_I64,  .size_bytes = 8,  .align_bytes = 8};
-    prim_types[TYPE_F64]  = (Type){.kind = TYPE_F64,  .size_bytes = 8,  .align_bytes = 8};
-    prim_types[TYPE_U128] = (Type){.kind = TYPE_U128, .size_bytes = 16, .align_bytes = 16};
-    prim_types[TYPE_I128] = (Type){.kind = TYPE_I128, .size_bytes = 16, .align_bytes = 16};
-    prim_types[TYPE_F128] = (Type){.kind = TYPE_F128, .size_bytes = 16, .align_bytes = 16};
-
-    prim_types[TYPE_BOOL] = (Type){.kind = TYPE_BOOL, .size_bytes = 1,  .align_bytes = 1};
-    prim_types[TYPE_STR]  = (Type){.kind = TYPE_STR,  .size_bytes = 16, .align_bytes = 8}; // ptr + length, undecided
-    prim_types[TYPE_CHAR] = (Type){.kind = TYPE_CHAR, .size_bytes = 4,  .align_bytes = 4}; // Room for a full unicode codepoint
-
-    compound_bucket_count = TYPE_POOL_INITIAL_BUCKETS;
-    compound_buckets = arena_alloc_bump(&ast_arena, compound_bucket_count * sizeof(TypePoolEntry*));
-    memset(compound_buckets, 0, compound_bucket_count * sizeof(TypePoolEntry*));
+    prim_types[TYPE_U8]
 }
 
 f_static_inline uint32_t fnv_hash(const uint8_t *data, const size_t length) {

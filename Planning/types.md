@@ -36,8 +36,7 @@ Things that can be hollow(and why):
 
 The only thing that can't be hollow are per-element arrays(sparse arrays), that'll come later
 
-Most types can be hollow and for an 8-byte number, 7 bytes of padding would be added for alignment, same with structs and arrays.
-This is a real decision as it inflates every single prim by a significant amount, but we don't live in a world were you only get 500 bytes to work with, and I'm pretty sure I can have some flag to switch to a different type system where the `hollow` flag doesn't exist
+Hollow flag is 1 byte, but alignment forces it from 9 → 16
 Unit, never, and the internal type vile can't be hollow, there is no 'unknown' state for any of them.
 
 Functions are first-class types.

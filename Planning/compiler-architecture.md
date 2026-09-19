@@ -36,7 +36,7 @@ Fix:
         - ./ increments depth by 1
         - \. decrements depth by 1
         - stop when depth = 0
-        - save first ./ row and col for errors, when depth goes from 0 to 1
+        - save first ./ row and col for errors, when de[typess.c](../../../.config/JetBrains/CLion2026.2/scratches/typess.c)pth goes from 0 to 1
 
 W/error flags:
 - truncation/lossy casting -Wlossy-cast
