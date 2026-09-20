@@ -5,8 +5,6 @@
 
 #define f_static_inline __attribute__((__always_inline__)) static inline
 
-typedef struct Type Type;
-
 enum {
     TYPE_POOL_INITIAL_BUCKETS = 256,
     NUM_PRIM_TYPES = (TYPE_PTR), // Everything before the first complex type
@@ -17,7 +15,7 @@ typedef struct {
     Type *type;
 } StructField;
 
-struct Type {
+typedef struct Type {
     TypeKind kind;
     // 4 bytes of padding
     size_t size_bytes;
@@ -45,7 +43,7 @@ struct Type {
             Type **params;
         } function;
     };
-};
+} Type;
 
 // Each hash bucket is a linked list of these, the entry owns a real type by value, so it never moves
 typedef struct TypePoolEntry {
