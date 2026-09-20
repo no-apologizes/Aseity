@@ -4,7 +4,7 @@ Below are types, excluding primitives, as they follow a simple pattern.
 
 For unsigned, you put a 'u' plus how many bits it is: `u8`, `u32`, `u128`.
 The same is for signed and floats, with 'i' and 'f' used respectively: `i64`, `f32`, `f128`.
-There are no 8 or 16-bit floats. 
+There are no 8 or 16-bit floats.
 
 | Type              | Syntax                       |
 |-------------------|------------------------------|
@@ -37,7 +37,7 @@ Things that can be hollow(and why):
 The only thing that can't be hollow are per-element arrays(sparse arrays), that'll come later
 
 Hollow flag is 1 byte, but alignment forces it from 9 → 16
-Unit, never, and the internal type vile can't be hollow, there is no 'unknown' state for any of them.
+Unit, never, and the internal type vile can't be hollow, as there is no 'unknown' state for any of them.
 
 Functions are first-class types.
 Const-ness is stored in the ASTNode instead of the type.

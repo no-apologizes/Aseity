@@ -36,11 +36,11 @@ Type *type_struct_declare(uint32_t name_id, bool hollow, bool *out_already_decla
 // StructField stays private to type.c, callers pass parallel arrays instead of
 // constructing an opaque-from-outside struct
 void type_struct_complete(Type *struct_type, uint32_t field_count,
-                            uint32_t *field_name_ids, Type **field_types);
-bool type_is_equal(Type *a, Type *b);
+                            const uint32_t *field_name_ids, Type **field_types);
+bool type_is_equal(const Type *a, const Type *b);
 
 // Readonly accessors as type is opaque
-TypeKind type_kind_of(Type *t);
-size_t type_size_of(Type *t);
-size_t type_align_of(Type *t);
-bool type_is_hollow(Type *t);
+TypeKind type_kind_of(const Type *t);
+size_t type_size_of(const Type *t);
+size_t type_align_of(const Type *t);
+bool type_is_hollow(const Type *t);

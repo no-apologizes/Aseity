@@ -5,6 +5,8 @@
 
 #define f_static_inline __attribute__((__always_inline__)) static inline
 
+typedef struct Type Type;
+
 enum {
     TYPE_POOL_INITIAL_BUCKETS = 256,
     NUM_PRIM_TYPES = (TYPE_PTR), // Everything before the first complex type
@@ -82,9 +84,29 @@ void type_init(void) {
     // Only one valid kind of these types
     prim_types[TYPE_UNIT][0]  = (Type){.kind = TYPE_UNIT};
     prim_types[TYPE_NEVER][0] = (Type){.kind = TYPE_NEVER};
-    //prim_types[TYPE_VILE][0]  = (Type){.kind = TYPE_VILE};
+    prim_types[TYPE_VILE][0]  = (Type){.kind = TYPE_VILE};
 
-    prim_types[TYPE_U8]
+    set_prim(TYPE_U8,   1,  1);
+    set_prim(TYPE_I8,   1,  1);
+    set_prim(TYPE_U16,  2,  2);
+    set_prim(TYPE_I16,  2,  2);
+    set_prim(TYPE_U32,  4,  4);
+    set_prim(TYPE_I32,  4,  4);
+    set_prim(TYPE_F32,  4,  4);
+    set_prim(TYPE_U64,  8,  8);
+    set_prim(TYPE_I64,  8,  8);
+    set_prim(TYPE_F64,  8,  8);
+    set_prim(TYPE_U128, 16, 16);
+    set_prim(TYPE_I128, 16, 16);
+    set_prim(TYPE_F128, 16, 16);
+
+    set_prim(TYPE_BOOL, 1,  1);
+    set_prim(TYPE_STR,  16, 8); // ptr + length, undecided
+    set_prim(TYPE_CHAR, 4,  4); // Room for a full unicode codepoint
+
+    compound_bucket_count = TYPE_POOL_INITIAL_BUCKETS;
+    compound_buckets = arena_alloc_bump(&ast_arena, compound_bucket_count * sizeof(TypePoolEntry*));
+    memset(compound_buckets, 0, compound_bucket_count * sizeof(TypePoolEntry*));
 }
 
 f_static_inline uint32_t fnv_hash(const uint8_t *data, const size_t length) {
@@ -102,10 +124,12 @@ f_static_inline uint32_t hash_ptr(const void *ptr) {
 
 f_static_inline uint32_t type_hash(const Type *t) {
     uint32_t h = (uint32_t)t->kind * 2654435761U; // Knuth's prime multiplicative hashing multiplier for 32-bit number
+    // hollow lives on Type's top level now, so fold it in once for ever kind, and is harmless for
+    // func/unit/never/vile but give struct and array correct identity without touching their own cases below
+    h ^= (uint32_t)t->hollow;
     switch (t->kind) {
     case TYPE_PTR: {
         h ^= hash_ptr(t->pointer.pointee);
-        h ^= (uint32_t)t->pointer.nullable;
         break;
     }
     case TYPE_ARRAY: {
@@ -143,21 +167,34 @@ f_static_inline Type *compound_lookup_or_intern(const Type *query) {
     return &entry->type;
 }
 
-Type *type_get_prim(const TypeKind kind) { return &prim_types[kind]; }
+Type *type_get_prim(const TypeKind kind, const bool hollow) {
+    // unit, never, and vile never have a hollow variant
+    if (kind == TYPE_UNIT || kind == TYPE_NEVER || kind == TYPE_VILE) {
+        return &prim_types[kind][0];
+    }
+    return &prim_types[kind][hollow ? 1 : 0];
+}
 
-Type *type_intern_ptr(Type *pointee, const bool nullable) {
-    Type query = {.kind = TYPE_PTR, .size_bytes = 8, .align_bytes = 8}; // Pointer width, fixed regradless of pointee
+Type *type_intern_ptr(Type *pointee, const bool hollow) {
+    // Pointer width is fixed regardless of pointee and hollow, as there is a valid bit pattern
+    Type query = {.kind = TYPE_PTR, .size_bytes = 8, .align_bytes = 8, .hollow = hollow};
     query.pointer.pointee = pointee;
-    query.pointer.nullable = nullable;
     return compound_lookup_or_intern(&query);
 }
 
-Type *type_intern_array(Type *element, size_t length) {
-    Type query = {.kind = TYPE_ARRAY};
+Type *type_intern_array(Type *element, const size_t length, const bool hollow) {
+    // Only whole arrays can be hollow, for now...
+    Type query = {.kind = TYPE_ARRAY, .hollow = hollow};
     query.array.element = element;
     query.array.length = length;
-    query.size_bytes = element->size_bytes * length;
-    query.align_bytes = element->align_bytes;
+    const size_t base_size = element->size_bytes * length;
+    const size_t base_align = element->align_bytes;
+    if (hollow) {
+        hollow_wrap_size(base_size, base_align, &query.size_bytes, &query.align_bytes);
+    } else {
+        query.size_bytes = base_size;
+        query.align_bytes = base_align;
+    }
     return compound_lookup_or_intern(&query);
 }
 
@@ -177,15 +214,17 @@ Type *type_intern_function(Type *return_type, const uint16_t param_count, Type *
     return compound_lookup_or_intern(&query);
 }
 
-Type *type_struct_declare(const uint32_t name_id, bool *out_already_declared) {
+Type *type_struct_declare(const uint32_t name_id, const bool hollow, bool *out_already_declared) {
     // Build a probe with just enough set,
     // so a real struct of this would land in the same bucket
-    Type probe = {.kind = TYPE_STRUCT};
+    Type probe = {.kind = TYPE_STRUCT, .hollow = hollow};
     probe.structure.name_id = name_id;
     const size_t bucket = type_hash(&probe) % compound_bucket_count;
 
     for (TypePoolEntry *e = compound_buckets[bucket]; e; e = e->next) {
-        if (e->type.kind == TYPE_STRUCT && e->type.structure.name_id == name_id) {
+        // hollow is a part of a struct's identity
+        if (e->type.kind == TYPE_STRUCT && e->type.structure.name_id == name_id
+            && e->type.hollow == hollow) {
             // Already exists, could be a valid forward-reference or declaration
             *out_already_declared = true;
             return &e->type;
@@ -194,7 +233,7 @@ Type *type_struct_declare(const uint32_t name_id, bool *out_already_declared) {
 
     // New, insert placeholder before any fields exist, this is what makes self-referential structs possible
     *out_already_declared = false;
-    Type query = {.kind = TYPE_STRUCT};
+    Type query = {.kind = TYPE_STRUCT, .hollow = hollow};
     query.structure.name_id = name_id;
     query.structure.is_complete = false;
 
@@ -205,16 +244,31 @@ Type *type_struct_declare(const uint32_t name_id, bool *out_already_declared) {
     return &entry->type;
 }
 
-void type_struct_complete(Type *struct_type, const uint32_t field_count, StructField *fields) {
+
+void type_struct_complete(Type *struct_type, const uint32_t field_count,
+                            const uint32_t *field_name_ids, Type **field_types) {
     size_t total_size = 0;
     size_t max_align = 1;
     for (uint32_t i = 0; i < field_count; i++) {
-        const size_t falign = fields[i].type->align_bytes;
+        const size_t falign = field_types[i]->align_bytes;
         total_size = (total_size + falign - 1) & ~(falign - 1); // Round up to falign
-        total_size += fields[i].type->size_bytes;
+        total_size += field_types[i]->size_bytes;
         if (falign > max_align) { max_align = falign; }
     }
     total_size = (total_size + max_align - 1) & ~(max_align - 1); // Final round-up
+
+    // Fields must outlive this call, as the callers array could be short-lived, and
+    // StructField is itself private to this file so build the real array here so nothing
+    // outside of this needs to know StructField exists
+    StructField *fields = arena_alloc_bump(&ast_arena, field_count * sizeof(StructField));
+    for (uint32_t i = 0; i < field_count; i++) {
+        fields[i].name_id = field_name_ids[i];
+        fields[i].type = field_types[i];
+    }
+
+    if (struct_type->hollow) {
+        hollow_wrap_size(total_size, max_align, &total_size, &max_align);
+    }
 
     // Mutate the same type type_struct_declare already interned
     struct_type->structure.field_count = field_count;
@@ -226,6 +280,7 @@ void type_struct_complete(Type *struct_type, const uint32_t field_count, StructF
 
 bool type_is_equal(const Type *a, const Type *b) {
     if (a->kind != b->kind) return false;
+    if (a->hollow != b->hollow) return false;
     switch (a->kind) {
         case TYPE_PTR: {
             // Valid only because pointee was interned before this type was built.
@@ -233,13 +288,13 @@ bool type_is_equal(const Type *a, const Type *b) {
             // The first one would go though and not find an entry, and create one, and returns its address.
             // The second would do the same and hash to the same exact bucket, and it walks until one of its entries also passes type_is_equal
             // same bucket && passes type_is_equal == same returned address
-            return a->pointer.pointee == b->pointer.pointee && a->pointer.nullable == b->pointer.nullable;
+            return a->pointer.pointee == b->pointer.pointee;
         }
         case TYPE_ARRAY: {
             return a->array.element == b->array.element && a->array.length == b->array.length;
         }
         case TYPE_STRUCT: {
-            return a->structure.name_id == b->structure.name_id;
+            return a->structure.name_id == b->structure.name_id;// + hollow, checked already
         }
         case TYPE_FUNCTION: {
             if (a->function.return_type != b->function.return_type) { return false; }
@@ -252,3 +307,7 @@ bool type_is_equal(const Type *a, const Type *b) {
         default: return true;
     }
 }
+TypeKind type_kind_of(const Type *t) { return t->kind; }
+size_t type_size_of(const Type *t) { return t->size_bytes; }
+size_t type_align_of(const Type *t) { return t->align_bytes; }
+bool type_is_hollow(const Type *t) { return t->hollow; }
