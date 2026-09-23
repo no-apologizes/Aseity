@@ -1,4 +1,4 @@
-#include "Headers/lexer.h"
+#include "lexer.h"
 #include <stdio.h>
 
 int main() { //const int argc, char **argv

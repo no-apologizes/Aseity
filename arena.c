@@ -1,11 +1,8 @@
-#include "Headers/arena.h"
+#include "arena.h"
+#include "common.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#define likely(a) __builtin_expect(!!(a), 1)
-#define unlikely(a) __builtin_expect(!!(a), 0)
-#define f_static_inline __attribute__((__always_inline__)) static inline
 
 // Global Compiler Arena Instantiations
 HybridArena ast_arena;

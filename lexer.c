@@ -1,11 +1,8 @@
-#include "Headers/lexer.h"
+#include "lexer.h"
+#include "common.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
-
-#define likely(a) __builtin_expect(!!(a), 1)
-#define unlikely(a) __builtin_expect(!!(a), 0)
-#define f_static_inline __attribute__((__always_inline__)) static inline
 
 typedef struct {
     const char *cursor;

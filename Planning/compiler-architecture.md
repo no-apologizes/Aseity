@@ -6,7 +6,8 @@ This is a compiler for the Aseity language
 - No implicit conversions
 - Mostly postfix
 - At least postfix for math
-- Single Threaded (for noe)
+- Single Threaded (for now)
+- Linux only
 
 Aseity is a low-level language that is heavily inspired by C and fixes its weak typing while also enforcing more explicit typing.
 Comments are ` ./ comment \. `. There are no single-line comments.
@@ -19,8 +20,6 @@ Comments are ` ./ comment \. `. There are no single-line comments.
     - andie...
 
 # Planning
-
-
 
 TODO:
 - hollow and alias keywords and finalize keywords for lexer

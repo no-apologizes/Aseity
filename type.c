@@ -1,9 +1,8 @@
-#include "Headers/type.h"
-#include "Headers/arena.h"
+#include "type.h"
+#include "arena.h"
+#include "common.h"
 #include <string.h>
 #include <stdint.h>
-
-#define f_static_inline __attribute__((__always_inline__)) static inline
 
 enum {
     TYPE_POOL_INITIAL_BUCKETS = 256,
@@ -59,7 +58,7 @@ static Type prim_types[NUM_PRIM_TYPES][2];
 static TypePoolEntry **compound_buckets;
 static size_t compound_bucket_count;
 
-// is hollow before or after the value?
+// hollow is before so it sits at a fixed offset of 0, having it after Type wouldn't be worse but every Type is a different size
 f_static_inline void hollow_wrap_size(const size_t base_size, const size_t base_align,
                                         size_t *out_size, size_t *out_align) {
     const size_t align = base_align > 0 ? base_align : 1;
@@ -105,15 +104,6 @@ void type_init(void) {
     compound_bucket_count = TYPE_POOL_INITIAL_BUCKETS;
     compound_buckets = arena_alloc_bump(&ast_arena, compound_bucket_count * sizeof(TypePoolEntry*));
     memset(compound_buckets, 0, compound_bucket_count * sizeof(TypePoolEntry*));
-}
-
-f_static_inline uint32_t fnv_hash(const uint8_t *data, const size_t length) {
-    uint32_t fnv_offset_basis = 2166136261U;
-    for (size_t i = 0; i < length; i++) {
-        fnv_offset_basis ^= (unsigned char)data[i];
-        fnv_offset_basis *= 16777619u; // FNV Prime
-    }
-    return fnv_offset_basis;
 }
 
 f_static_inline uint32_t hash_ptr(const void *ptr) {

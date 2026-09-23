@@ -1,12 +1,10 @@
-#include "Headers/string_pool.h"
-#include "Headers/arena.h"
+#include "string_pool.h"
+#include "arena.h"
+#include "common.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
-
-#define unlikely(a) __builtin_expect(!!(a), 0)
-#define f_static_inline __attribute__((__always_inline__)) static inline
 
 enum {
     STRING_POOL_INITIAL_BUCKETS = 256,
@@ -20,22 +18,21 @@ typedef struct StringPoolEntry {
     struct StringPoolEntry *next;
 } StringPoolEntry;
 
-f_static_inline uint32_t fnv_hash(const char *str, const size_t length) {
-    uint32_t fnv_offset_basis = 2166136261U;
-    for (size_t i = 0; i < length; i++) {
-        fnv_offset_basis ^= (unsigned char)str[i];
-        fnv_offset_basis *= 16777619u; // FNV Prime
-    }
-    return fnv_offset_basis;
-}
-
 void string_pool_init(StringPool *pool) {
     pool->bucket_count = STRING_POOL_INITIAL_BUCKETS;
     pool->buckets = calloc(pool->bucket_count, sizeof(StringPoolEntry *));
-
+    if (unlikely(pool->buckets == NULL)) {
+        (void)fprintf(stderr, "String Pool Initialization: Allocating memory for string buckets failed.\n");
+        exit(1);
+    }
+    
     pool->handle_capacity = STRING_POOL_INITIAL_HANDLES;
     pool->handle_count = 0;
     pool->handles = malloc(pool->handle_capacity * sizeof(InternedString));
+    if (unlikely(pool->handles == NULL)) {
+        (void)fprintf(stderr, "String Pool Initialization: Allocating memory for string handles failed.\n");
+        exit(1);
+    }
 }
 
 void string_pool_destroy(StringPool *pool) {
@@ -50,7 +47,7 @@ uint32_t string_intern(StringPool *pool, const char *str, const size_t length) {
     const size_t bucket_index = hash % pool->bucket_count;
 
     // Check if this string has already been interned
-    for (StringPoolEntry *entry = pool->buckets[bucket_index]; entry; entry = entry->next) {
+    for (const StringPoolEntry *entry = pool->buckets[bucket_index]; entry; entry = entry->next) {
         if (entry->length == length && memcmp(entry->str, str, length) == 0) {
             return entry->handle;
         }}
