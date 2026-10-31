@@ -232,13 +232,28 @@ Type *type_struct_declare(const uint32_t name_id, const bool hollow, bool *out_a
     return &entry->type;
 }
 
+// A Type only has a known layout if it's not an incomplete struct
+f_static_inline bool type_has_layout(const Type *t) {
+    while (t->kind == TYPE_ARRAY) { t = t->array.element; }
+    return t->kind != TYPE_STRUCT || t->structure.is_complete;
+}
 
-void type_struct_complete(Type *struct_type, const uint32_t field_count,
+bool type_struct_complete(Type *struct_type, const uint32_t field_count,
                             const uint32_t *field_name_ids, Type **field_types) {
+    if (struct_type->kind != TYPE_STRUCT || struct_type->structure.is_complete) { return false; }
+
+    // Validate before writing anything, so a rejected struct stays untouched/incomplete
+    // This also rejects a struct containing itself by value, as it is incomplete until this function returns
+    // (self-reference through a pointer is fine, as the pointer size does not depend on the pointee)
+    for (uint32_t i = 0; i < field_count; i++) {
+        if (!type_has_layout(field_types[i])) { return false; }
+    }
+
     size_t total_size = 0;
     size_t max_align = 1;
     for (uint32_t i = 0; i < field_count; i++) {
-        const size_t falign = field_types[i]->align_bytes;
+        // unit/never/vile have align 0 and size 0, and rounding up to 0 would zero total_size
+        const size_t falign = field_types[i]->align_bytes > 0 ? field_types[i]->align_bytes : 1;
         total_size = (total_size + falign - 1) & ~(falign - 1); // Round up to falign
         total_size += field_types[i]->size_bytes;
         if (falign > max_align) { max_align = falign; }
@@ -264,6 +279,7 @@ void type_struct_complete(Type *struct_type, const uint32_t field_count,
     struct_type->structure.is_complete = true;
     struct_type->size_bytes = total_size;
     struct_type->align_bytes = max_align;
+    return true;
 }
 
 bool type_is_equal(const Type *a, const Type *b) {
@@ -295,6 +311,7 @@ bool type_is_equal(const Type *a, const Type *b) {
         default: return true;
     }
 }
+
 TypeKind type_kind_of(const Type *t) { return t->kind; }
 size_t type_size_of(const Type *t) { return t->size_bytes; }
 size_t type_align_of(const Type *t) { return t->align_bytes; }

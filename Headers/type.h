@@ -35,7 +35,7 @@ Type *type_intern_function(Type *return_type, uint16_t param_count, Type **param
 Type *type_struct_declare(uint32_t name_id, bool hollow, bool *out_already_declared);
 // StructField stays private to type.c, callers pass parallel arrays instead of
 // constructing an opaque-from-outside struct
-void type_struct_complete(Type *struct_type, uint32_t field_count,
+bool type_struct_complete(Type *struct_type, uint32_t field_count,
                             const uint32_t *field_name_ids, Type **field_types);
 bool type_is_equal(const Type *a, const Type *b);
 
