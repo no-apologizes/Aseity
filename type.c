@@ -3,6 +3,8 @@
 #include "common.h"
 #include <string.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 enum {
     TYPE_POOL_INITIAL_BUCKETS = 256,
@@ -170,11 +172,25 @@ Type *type_intern_ptr(Type *pointee, const bool hollow) {
     return compound_lookup_or_intern(&query);
 }
 
+// A Type only has a known layout if it's not an incomplete struct
+f_static_inline bool type_has_layout(const Type *t) {
+    while (t->kind == TYPE_ARRAY) { t = t->array.element; }
+    return t->kind != TYPE_STRUCT || t->structure.is_complete;
+}
+
 Type *type_intern_array(Type *element, const size_t length, const bool hollow) {
+    // The size is computed once and stuck into the interned Type, so an element
+    // without a layout (an incomplete struct) would permanently give a size of 0
+    if (!type_has_layout(element)) { return NULL; }
+
     // Only whole arrays can be hollow, for now...
     Type query = {.kind = TYPE_ARRAY, .hollow = hollow};
     query.array.element = element;
     query.array.length = length;
+    if (length > 0 && element->size_bytes > SIZE_MAX / length) {
+        fprintf(stderr, "Array too big");
+        exit(1);
+    }
     const size_t base_size = element->size_bytes * length;
     const size_t base_align = element->align_bytes;
     if (hollow) {
@@ -232,10 +248,24 @@ Type *type_struct_declare(const uint32_t name_id, const bool hollow, bool *out_a
     return &entry->type;
 }
 
-// A Type only has a known layout if it's not an incomplete struct
-f_static_inline bool type_has_layout(const Type *t) {
-    while (t->kind == TYPE_ARRAY) { t = t->array.element; }
-    return t->kind != TYPE_STRUCT || t->structure.is_complete;
+// Readonly version to the loop in type_struct_declare
+f_static_inline Type *find_struct(const uint32_t name_id, const bool hollow) {
+    Type probe = {.kind = TYPE_STRUCT, .hollow = hollow};
+    probe.structure.name_id = name_id;
+    const size_t bucket = type_hash(&probe) % compound_bucket_count;
+    for (TypePoolEntry *e = compound_buckets[bucket]; e; e = e->next) {
+        if (e->type.kind == TYPE_STRUCT && e->type.structure.name_id == name_id
+            && e->type.hollow == hollow) {
+            return &e->type;
+        }
+    }
+    return NULL;
+}
+
+Type *type_struct_lookup(const uint32_t name_id) {
+    // hollow is part of a struct identity, so each variant hashes to its own bucket and needs its own probe
+    Type *t = find_struct(name_id, false);
+    return t ? t : find_struct(name_id, true);
 }
 
 bool type_struct_complete(Type *struct_type, const uint32_t field_count,
@@ -246,7 +276,8 @@ bool type_struct_complete(Type *struct_type, const uint32_t field_count,
     // This also rejects a struct containing itself by value, as it is incomplete until this function returns
     // (self-reference through a pointer is fine, as the pointer size does not depend on the pointee)
     for (uint32_t i = 0; i < field_count; i++) {
-        if (!type_has_layout(field_types[i])) { return false; }
+        // NULL is what type_intern_array returns for an element without a layout
+        if (!field_types[i] || !type_has_layout(field_types[i])) { return false; }
     }
 
     size_t total_size = 0;

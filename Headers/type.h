@@ -30,9 +30,12 @@ typedef struct Type Type;
 void type_init(void);
 Type *type_get_prim(TypeKind kind, bool hollow);
 Type *type_intern_ptr(Type *pointee, bool hollow);
+// Returns NULL if element is an incomplete struct (or an array of one), as its size is not known yet
 Type *type_intern_array(Type *element, size_t length, bool hollow);
 Type *type_intern_function(Type *return_type, uint16_t param_count, Type **params);
 Type *type_struct_declare(uint32_t name_id, bool hollow, bool *out_already_declared);
+// Readonly version of type_struct_declare and returns struct decl under name_id, checks both hollow and non-hollow but prefers the non-hollow one
+Type *type_struct_lookup(uint32_t name_id);
 // StructField stays private to type.c, callers pass parallel arrays instead of
 // constructing an opaque-from-outside struct
 bool type_struct_complete(Type *struct_type, uint32_t field_count,
