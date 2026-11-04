@@ -3,8 +3,6 @@
 #include "common.h"
 #include <string.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
 
 enum {
     TYPE_POOL_INITIAL_BUCKETS = 256,
@@ -61,14 +59,18 @@ static TypePoolEntry **compound_buckets;
 static size_t compound_bucket_count;
 
 // hollow is before so it sits at a fixed offset of 0, having it after Type wouldn't be worse but every Type is a different size
-f_static_inline void hollow_wrap_size(const size_t base_size, const size_t base_align,
+// Returns false if the wrapped size does not fit in size_t, instead of silently wrapping
+f_static_inline bool hollow_wrap_size(const size_t base_size, const size_t base_align,
                                         size_t *out_size, size_t *out_align) {
     const size_t align = base_align > 0 ? base_align : 1;
     const size_t tag_end = (1 + align - 1) & ~(align - 1);
-    size_t total = tag_end + base_size;
-    total = (total + align - 1) & ~(align - 1); // Final round up for struct alignment
+    size_t total;
+    if (__builtin_add_overflow(tag_end, base_size, &total)) { return false; }
+    if (__builtin_add_overflow(total, align - 1, &total)) { return false; }
+    total &= ~(align - 1); // Final round up for struct alignment
     *out_size = total;
     *out_align = align;
+    return true;
 }
 
 // Sets both hollow and non-hollow types
@@ -187,14 +189,11 @@ Type *type_intern_array(Type *element, const size_t length, const bool hollow) {
     Type query = {.kind = TYPE_ARRAY, .hollow = hollow};
     query.array.element = element;
     query.array.length = length;
-    if (length > 0 && element->size_bytes > SIZE_MAX / length) {
-        fprintf(stderr, "Array too big");
-        exit(1);
-    }
-    const size_t base_size = element->size_bytes * length;
+    size_t base_size;
+    if (__builtin_mul_overflow(element->size_bytes, length, &base_size)) { return NULL; }
     const size_t base_align = element->align_bytes;
     if (hollow) {
-        hollow_wrap_size(base_size, base_align, &query.size_bytes, &query.align_bytes);
+        if (!hollow_wrap_size(base_size, base_align, &query.size_bytes, &query.align_bytes)) { return NULL; }
     } else {
         query.size_bytes = base_size;
         query.align_bytes = base_align;
@@ -285,11 +284,13 @@ bool type_struct_complete(Type *struct_type, const uint32_t field_count,
     for (uint32_t i = 0; i < field_count; i++) {
         // unit/never/vile have align 0 and size 0, and rounding up to 0 would zero total_size
         const size_t falign = field_types[i]->align_bytes > 0 ? field_types[i]->align_bytes : 1;
-        total_size = (total_size + falign - 1) & ~(falign - 1); // Round up to falign
-        total_size += field_types[i]->size_bytes;
+        if (__builtin_add_overflow(total_size, falign - 1, &total_size)) { return false; }
+        total_size &= ~(falign - 1); // Round up to falign
+        if (__builtin_add_overflow(total_size, field_types[i]->size_bytes, &total_size)) { return false; }
         if (falign > max_align) { max_align = falign; }
     }
-    total_size = (total_size + max_align - 1) & ~(max_align - 1); // Final round-up
+    if (__builtin_add_overflow(total_size, max_align - 1, &total_size)) { return false; }
+    total_size &= ~(max_align - 1); // Final round-up
 
     // Fields must outlive this call, as the callers array could be short-lived, and
     // StructField is itself private to this file so build the real array here so nothing
@@ -301,7 +302,7 @@ bool type_struct_complete(Type *struct_type, const uint32_t field_count,
     }
 
     if (struct_type->hollow) {
-        hollow_wrap_size(total_size, max_align, &total_size, &max_align);
+        if (!hollow_wrap_size(total_size, max_align, &total_size, &max_align)) { return false; }
     }
 
     // Mutate the same type type_struct_declare already interned
