@@ -13,6 +13,10 @@ typedef enum {
     TOKEN_TYPE,                     // Type, e.g., i64, f32, etc.
     TOKEN_CONST,                    // const
     TOKEN_INLINE,                   // inline
+    TOKEN_SHADOW,
+    TOKEN_HOLLOW,
+    TOKEN_ALIAS,
+
     // Other ones like static
     TOKEN_RETURN,                   // return
     TOKEN_GOTO,                     // goto
@@ -30,6 +34,7 @@ typedef enum {
     TOKEN_CARET,                    // math ^ or XOR
     TOKEN_AMPERSAND,                // & for address-of and bitwise AND
     TOKEN_STAR,                     // * for mul and dereferencing
+    TOKEN_AT,                       // @
 
     // Arithmetic Operators
     TOKEN_OPERATOR,                 // Fallback for now, or user defined ones like ∈ or something
@@ -89,7 +94,9 @@ typedef enum {
     TOKEN_COLON,                    // :
     TOKEN_COMMA,                    // ,
     TOKEN_DOT,                      // .
+    TOKEN_DOTDOT,                   // ..
 
+    TOKEN_UNCLOSED_COMMENT,
     TOKEN_UNKNOWN,
     TOKEN_EOF,
 } TokenType;
@@ -102,7 +109,8 @@ typedef struct {
     int64_t column;    // Errors
 } Token;
 
-void lexer_init(const char *source);
+void lexer_init(const char *source, const char *filename);
+const char *lexer_file_name(void);
 Token lexer_next_token(void);
 
 // For interface files

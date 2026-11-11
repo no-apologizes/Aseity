@@ -2,6 +2,8 @@
 #include "common.h"
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct {
@@ -12,6 +14,7 @@ typedef struct {
 } LexerState;
 
 static LexerState S;
+static const char *file_name = "input";
 static const void *dispatch_table[256];
 static bool table_initialized = false;
 
@@ -25,7 +28,7 @@ f_static_inline char advance(void) {
             S.line++;
             S.column = 1;
             S.line_start = S.cursor;
-        } else {
+        } else if (((unsigned char)c & 0xC0U) != 0x80U) { // Continuation bytes don't start a new column
             S.column++;
         }}
     return c;
@@ -56,18 +59,17 @@ f_static_inline uint32_t decode_utf8(const char* src, int32_t* out_bytes) {
         return lead;
     }
     if ((lead & 0xE0U) == 0xC0U) {
-        if (unlikely(c[1] == '\0')) { goto malformed; } // Bounds check
+        if (unlikely((c[1] & 0xC0U) != 0x80U)) { goto malformed; } // Needs a continuation byte (also catches the NUL terminator)
         *out_bytes = 2;
         return (((uint32_t)lead & 0x1FU) << 6U) | ((uint32_t)c[1] & 0x3FU);
     }
     if ((lead & 0xF0U) == 0xE0U) {
-        if (unlikely(c[1] == '\0' || c[2] == '\0')) { goto malformed; } // Bounds check
+        if (unlikely((c[1] & 0xC0U) != 0x80U || (c[2] & 0xC0U) != 0x80U)) { goto malformed; } // Needs continuation bytes
         *out_bytes = 3;
         return (((uint32_t)lead & 0x0FU) << 12U) | (((uint32_t)c[1] & 0x3FU) << 6U) | ((uint32_t)c[2] & 0x3FU);
     }
-    // Added proper F8 mask for 4-byte chars
     if ((lead & 0xF8U) == 0xF0U) {
-        if (unlikely(c[1] == '\0' || c[2] == '\0' || c[3] == '\0')) { goto malformed; } // Bounds check
+        if (unlikely((c[1] & 0xC0U) != 0x80U || (c[2] & 0xC0U) != 0x80U || (c[3] & 0xC0U) != 0x80U)) { goto malformed; } // Needs continuation bytes
         *out_bytes = 4;
         return (((uint32_t)lead & 0x07U) << 18U) | (((uint32_t)c[1] & 0x3FU) << 12U) | (((uint32_t)c[2] & 0x3FU) << 6U) | ((uint32_t)c[3] & 0x3FU);
     }
@@ -111,22 +113,28 @@ f_static_inline TokenType match_keyword(const char *start, const size_t length) 
         }
         case 4: {
             if (strncmp(start, "bool", 4) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "char", 4) == 0) { return TOKEN_TYPE; }
             if (strncmp(start, "i128", 4) == 0) { return TOKEN_TYPE; }
             if (strncmp(start, "u128", 4) == 0) { return TOKEN_TYPE; }
             if (strncmp(start, "f128", 4) == 0) { return TOKEN_TYPE; }
 
             if (strncmp(start, "goto", 4) == 0) { return TOKEN_GOTO; }
             if (strncmp(start, "else", 4) == 0) { return TOKEN_ELSE; }
+            if (strncmp(start, "unit", 4) == 0) { return TOKEN_TYPE; }
             break;
         }
         case 5: {
             if (strncmp(start, "const", 5) == 0) { return TOKEN_CONST; }
+            if (strncmp(start, "never", 5) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "alias", 5) == 0) { return TOKEN_ALIAS; }
             if (strncmp(start, "break", 5) == 0) { return TOKEN_BREAK; }
             break;
         }
         case 6: {
+            if (strncmp(start, "shadow", 6) == 0) { return TOKEN_SHADOW; }
             if (strncmp(start, "inline", 6) == 0) { return TOKEN_INLINE; }
             if (strncmp(start, "return", 6) == 0) { return TOKEN_RETURN; }
+            if (strncmp(start, "hollow", 6) == 0) { return TOKEN_HOLLOW; }
             if (strncmp(start, "struct", 6) == 0) { return TOKEN_STRUCT; }
             if (strncmp(start, "import", 6) == 0) { return TOKEN_IMPORT; }
             break;
@@ -161,13 +169,15 @@ f_static_inline void consume_other_identifiers(void) {
     }
 }
 
-void lexer_init(const char *source) {
+void lexer_init(const char *source, const char *filename) {
     S.cursor = source;
     S.line_start = S.cursor;
     S.line = 1;
     S.column = 1;
-
+    file_name = filename;
 }
+
+const char *lexer_file_name(void) { return file_name; }
 
 Token lexer_next_token(void) {
     if (unlikely(!table_initialized)) {
@@ -187,6 +197,7 @@ Token lexer_next_token(void) {
         dispatch_table['^']  = &&lex_caret;
         dispatch_table['&']  = &&lex_ampersand;
         dispatch_table['*']  = &&lex_star;
+        dispatch_table['@']  = &&lex_at;
 
         dispatch_table['$']  = &&lex_label_ref;
         dispatch_table['=']  = &&lex_equals;
@@ -217,29 +228,46 @@ Token lexer_next_token(void) {
         table_initialized = true;
     }
 
+
+    int64_t depth = 0;
+    Token first_comment_token = {0};
     while (1) {
-        skip_whitespace();
-        if (peek() == '.' && S.cursor[1] == '/') {
-            advance(); // '.'
-            advance(); // '/'
-            while (1) {
-                if (peek() == '\0') {
-                    Token t;
-                    t.line = S.line;
-                    t.column = S.column;
-                    t.start = S.cursor;
-                    t.type = TOKEN_UNKNOWN;
-                    t.length = 0;
-                    return t; // Unterminated comment
+        if (depth == 0) {
+            // Only skip whitespace when we're NOT in a comment
+            skip_whitespace();
+        }
+        // Check if we're starting a comment or inside of one
+        if ((peek() == '.' && S.cursor[1] == '/') || depth > 0) {
+            // New comment starter: './'
+            if (peek() == '.' && S.cursor[1] == '/') {
+                if (depth == 0) {
+                    // Save first comment starter for error reporting
+                    first_comment_token.line = S.line;
+                    first_comment_token.column = S.column;
+                    first_comment_token.start = S.cursor;
+                    first_comment_token.type = TOKEN_UNCLOSED_COMMENT;
+                    first_comment_token.length = 2;
                 }
-                if (peek() == '\\' && S.cursor[1] == '.') {
-                    advance(); // '\'
-                    advance(); // '.'
-                    break;
-                }
-                advance();
+                depth += 1;
+                advance(); // '.'
+                advance(); // '/'
+                continue;
             }
-            continue; // There might be more whitespace/comments after this one
+
+            // Reached EOF on unenclosed comment
+            if (peek() == '\0') {
+                return first_comment_token;
+            }
+
+            if (peek() == '\\' && S.cursor[1] == '.') {
+                depth -= 1;
+                advance(); // '\'
+                advance(); // '.'
+                continue;
+            }
+
+            advance();
+            continue;
         }
         break; // No more whitespace or comments, cursor is at a valid token
     }
@@ -317,6 +345,8 @@ lex_star: {
     t.length = (size_t)(S.cursor - t.start);
     return t;
 }
+
+lex_at: { advance(); t.type = TOKEN_AT;      t.length = 1; return t; }
 
 lex_label_ref: {
     advance();
@@ -432,34 +462,63 @@ lex_rbrace:   { advance(); t.type = TOKEN_RBRACE;   t.length = 1; return t; }
 lex_bnot:     { advance(); t.type = TOKEN_BNOT;     t.length = 1; return t; }
 lex_colon:    { advance(); t.type = TOKEN_COLON;    t.length = 1; return t; }
 lex_comma:    { advance(); t.type = TOKEN_COMMA;    t.length = 1; return t; }
-lex_dot:      { advance(); t.type = TOKEN_DOT;      t.length = 1; return t; }
+
+lex_dot: {
+    advance();
+    if (peek() == '.') { advance(); t.type = TOKEN_DOTDOT; } // ..
+    else { t.type = TOKEN_DOT; }                                // .
+    t.length = (size_t)(S.cursor - t.start);
+    return t;
+}
 
 lex_string: {
+    const LexerState opening = S; // Cursor is on the opening quote
     advance();
     t.start = S.cursor; // Token text is the content only, not the quotes
     while (peek() != '"' && peek() != '\0') {
         if (peek() == '\\' && S.cursor[1] != '\0') { advance(); } // Skip escape char, let next advance() take the escaped char
         advance();
     }
-    t.length = (size_t)(S.cursor - t.start);
-    if (peek() == '"') { advance(); t.type = TOKEN_STRING_LIT; }
-    else { t.type = TOKEN_UNKNOWN; } // Hit EOF with no closing quote
+    if (peek() == '"') {
+        t.length = (size_t)(S.cursor - t.start);
+        advance();
+        t.type = TOKEN_STRING_LIT;
+        return t;
+    }
+    // Hit EOF
+    S = opening;
+    advance(); // Opening quote
+    while (peek() != '\n' && peek() != '\0') { advance(); }
+    t.start = opening.cursor; // The error token covers the opening quote too
+    t.length = (size_t)(S.cursor - opening.cursor);
+    t.type = TOKEN_UNKNOWN;
     return t;
 }
 
 lex_char: {
     advance();
+    const char *open_quote = t.start; // t.start is still the opening quote here
     t.start = S.cursor;
     if (peek() == '\\' && S.cursor[1] != '\0') {
         advance(); advance(); // Backslash + escaped char
     } else if ((unsigned char)peek() >= 0x80) {
         int32_t bytes = 0;
         decode_utf8(S.cursor, &bytes);
-        S.cursor += bytes; S.column++; // Multibyte char literal 'ℵ'
-    } else if (peek() != '\'' && peek() != '\0') { advance(); }
+        for (int32_t i = 0; i < bytes; i++) { advance(); } // Multibyte char literal 'ℵ'
+    } else if (peek() != '\'' && peek() != '\n' && peek() != '\0') { advance(); }
     t.length = (size_t)(S.cursor - t.start);
-    if (peek() == '\'' && t.length > 0) { advance(); t.type = TOKEN_CHAR_LIT; }
-    else { t.type = TOKEN_UNKNOWN; } // Unterminated or empty ''
+    if (peek() == '\'' && t.length > 0) { advance(); t.type = TOKEN_CHAR_LIT; return t; }
+
+    // Bad literal: empty '', too long 'ab', or unterminated. It is ONE error token, so skip to its
+    // closing quote on this line (never past the end of the line) and don't leave a stray quote behind
+    while (peek() != '\'' && peek() != '\n' && peek() != '\0') {
+        if (peek() == '\\' && S.cursor[1] != '\0' && S.cursor[1] != '\n') { advance(); }
+        advance();
+    }
+    if (peek() == '\'') { advance(); }
+    t.start = open_quote; // The error token covers the whole bad literal, quotes included
+    t.length = (size_t)(S.cursor - open_quote);
+    t.type = TOKEN_UNKNOWN;
     return t;
 }
 
