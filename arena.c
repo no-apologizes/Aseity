@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // Global Compiler Arena Instantiations
 HybridArena ast_arena;
@@ -10,19 +11,24 @@ HybridArena symbol_arena;
 
 /*
  * So WHY are we using Segregated Free-Lists?
- * It's because symbol_arena is highly predictable, as it only ever allocates three things:
- * SymbolTable struct: ~24 bytes
- * Symbol struct: ~144 bytes
- * Scope struct: ~528 bytes
+ * Local scopes come and go because every function pushes and pops a few, and the symbol table recycles exactly two
+ * fixed-size structs from symbol_arena for them:
+ * Symbol: 32 bytes
+ * Scope:  528 bytes
+ * Everything else in symbol_arena is bump allocated and lives for the whole compilation:
+ * The global scope: 528 bytes
+ * its 256-bucket hash array: 2048 bytes
+ * One SymbolPoolEntry (40, rounded up to 48) per global symbol
+ * The SymbolTable struct itself, 16 bytes belongs to the caller and isn't allocated here
  */
 
 // Helper
 f_static_inline int get_seglist_bucket(const size_t size) {
     // Notice how they're all powers of 2
     if (size <= 64) { return 0; }   // SymbolTable
-    if (size <= 256) { return 1; }  // Symbol
+    if (size <= 256) { return 1; }  // Unused but saves memory if something is slightly bigger than 32 bytes or slightly smaller than 528 bytes
     if (size <= 1024) { return 2; } // Scope
-    return 3;                   // Fallback for oversized structs
+    return 3;                          // Fallback for oversized structs
 }
 
 static ArenaPage *allocate_arena_page(const size_t size) {
@@ -110,6 +116,12 @@ void *arena_alloc_bump(HybridArena *arena, size_t size) {
 
     void *ptr = &page->memory[page->alloc_position];
     page->alloc_position += size;
+    return ptr;
+}
+
+void *arena_alloc_bump_zeroed(HybridArena *arena, const size_t size) {
+    void *ptr = arena_alloc_bump(arena, size);
+    memset(ptr, 0, size);
     return ptr;
 }
 
