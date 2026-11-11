@@ -7,7 +7,7 @@ This is a compiler for the Aseity language
 - Mostly postfix
 - At least postfix for math
 - Single Threaded (for now)
-- Linux only
+- Linux x86 only
 
 Aseity is a low-level language that is heavily inspired by C and fixes its weak typing while also enforcing more explicit typing.
 Comments are ` ./ comment \. `. There are no single-line comments.
@@ -17,12 +17,12 @@ Comments are ` ./ comment \. `. There are no single-line comments.
     - Computed gotos
     - All whitespaces and comments are skipped, so everything can be written on one line
 - Parser:
-    - andie...
+    - k
 
 # Planning
 
-TODO:
-- hollow and alias keywords and finalize keywords for lexer
+TODO: Bold means **completed**
+- **hollow and alias keywords and finalize keywords for lexer**
 
 const-ness lives on the ASTNode, not inside Type
 
@@ -30,12 +30,6 @@ Maybe(Can be implemented at any time):
 - type aliases
 
 Fix:
-- fix nested comments ./ ./ comment \. \. will stop at the first '\.'
-    - in_comment flag
-        - ./ increments depth by 1
-        - \. decrements depth by 1
-        - stop when depth = 0
-        - save first ./ row and col for errors, when depth goes from 0 to 1
 
 W/error flags:
 - truncation/lossy casting -Wlossy-cast

@@ -125,7 +125,7 @@ f_static_inline TokenType match_keyword(const char *start, const size_t length) 
         }
         case 5: {
             if (strncmp(start, "const", 5) == 0) { return TOKEN_CONST; }
-            if (strncmp(start, "never", 5) == 0) { return TOKEN_TYPE; }
+            if (strncmp(start, "never", 5) == 0) { return TOKEN_TYPE;  }
             if (strncmp(start, "alias", 5) == 0) { return TOKEN_ALIAS; }
             if (strncmp(start, "break", 5) == 0) { return TOKEN_BREAK; }
             break;
