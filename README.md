@@ -30,7 +30,7 @@ This is only built up to the parser and `ast_print.c` and `Headers/ast_print.h` 
   - A shift-reduce parser
 
 ### Demo:
-https://www.youtube.com/watch?v=CuCoGDCMznE
+https://youtu.be/9SurYQMpnoA
 
 ### Build & Usage:
 You can either download it or build from source. To not build from source, download the release, make it executable and run it.
