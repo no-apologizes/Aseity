@@ -45,6 +45,8 @@ mkdir build && cd build
 cmake ..
 
 cmake --build .
+
+./aseity
 ```
 
 ### AI Disclaimer:
